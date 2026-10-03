@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Atlas Vault</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="av-header">
+      <div id="av-logo">⚗️ Atlas Vault</div>
+      <div id="av-subtitle">PoE2 Build Manager</div>
+    </header>
+
+    <!-- Save + folder select -->
+    <div id="av-save-bar">
+      <button id="av-save-btn">💾 Save Current Build</button>
+      <select id="av-save-folder" title="Save into folder">
+        <option value="">No folder</option>
+      </select>
+    </div>
+
+    <!-- Search -->
+    <div id="av-search-bar">
+      <input type="search" id="av-search" placeholder="🔍 Search builds…" aria-label="Search builds" />
+    </div>
+
+    <!-- New folder -->
+    <div id="av-new-folder-bar">
+      <input type="text" id="av-new-folder-input" placeholder="New folder name…" maxlength="40" aria-label="New folder name" />
+      <button id="av-new-folder-btn" title="Create folder">＋</button>
+    </div>
+
+    <!-- Tree view -->
+    <div id="av-tree" role="tree" aria-label="Saved builds"></div>
+  </div>
+
+  <!-- Move modal -->
+  <div id="av-modal" class="av-hidden" role="dialog" aria-modal="true" aria-label="Move build to folder">
+    <div id="av-modal-box">
+      <h4>Move to Folder</h4>
+      <select id="av-modal-folder"></select>
+      <div id="av-modal-actions">
+        <button id="av-modal-cancel">Cancel</button>
+        <button id="av-modal-confirm">Move</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

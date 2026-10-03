@@ -1,0 +1,420 @@
+/* ============================================================
+   Atlas Vault – Popup Styles (Tree View)
+   PoE2-inspired dark theme, no tabs
+   ============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 360px;
+  min-height: 420px;
+  max-height: 600px;
+  background: #0d0d1e;
+  color: #c0c0e0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 600px;
+}
+
+/* ── Header ── */
+#av-header {
+  background: linear-gradient(135deg, #171735 0%, #0d0d1e 100%);
+  border-bottom: 1px solid #c8a96e33;
+  padding: 10px 14px 8px;
+  flex-shrink: 0;
+}
+
+#av-logo {
+  font-size: 16px;
+  font-weight: 800;
+  color: #c8a96e;
+  letter-spacing: 0.04em;
+}
+
+#av-subtitle {
+  font-size: 9.5px;
+  color: #505088;
+  margin-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+/* ── Save bar ── */
+#av-save-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid #181832;
+  flex-shrink: 0;
+}
+
+#av-save-btn {
+  flex: 1;
+  padding: 7px 10px;
+  background: #c8a96e;
+  color: #0d0d1e;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#av-save-btn:hover { background: #dfc080; }
+
+#av-save-folder {
+  width: 105px;
+  padding: 6px 5px;
+  background: #13133a;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Search bar ── */
+#av-search-bar {
+  padding: 6px 10px;
+  border-bottom: 1px solid #181832;
+  flex-shrink: 0;
+}
+
+#av-search {
+  width: 100%;
+  padding: 6px 10px;
+  background: #10102e;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 12px;
+}
+
+#av-search:focus { outline: 1px solid #c8a96e; }
+
+/* ── New folder bar ── */
+#av-new-folder-bar {
+  display: flex;
+  gap: 5px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #181832;
+  flex-shrink: 0;
+}
+
+#av-new-folder-input {
+  flex: 1;
+  padding: 6px 9px;
+  background: #10102e;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 11.5px;
+}
+
+#av-new-folder-input:focus { outline: 1px solid #c8a96e; }
+
+#av-new-folder-btn {
+  padding: 6px 12px;
+  background: #c8a96e;
+  color: #0d0d1e;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+#av-new-folder-btn:hover { background: #dfc080; }
+
+/* ── Tree view ── */
+#av-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #252550 #0d0d1e;
+}
+
+/* ── Folder node ── */
+.av-folder-node { margin-bottom: 1px; }
+
+.av-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px 6px 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.av-folder-header:hover { background: #131330; }
+
+.av-folder-arrow {
+  font-size: 9px;
+  color: #6060a0;
+  width: 12px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.av-folder-arrow.av-open { transform: rotate(90deg); }
+
+.av-folder-emoji { font-size: 14px; flex-shrink: 0; }
+
+.av-folder-name {
+  flex: 1;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #c8a96e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Inline rename input */
+.av-folder-rename-input {
+  flex: 1;
+  background: #0d0d1e;
+  border: 1px solid #c8a96e;
+  border-radius: 3px;
+  color: #c0c0e0;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.av-folder-count {
+  font-size: 10px;
+  color: #505080;
+  flex-shrink: 0;
+}
+
+.av-folder-rename-btn,
+.av-folder-del-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: #404070;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.av-folder-header:hover .av-folder-rename-btn,
+.av-folder-header:hover .av-folder-del-btn { opacity: 1; }
+
+.av-folder-rename-btn:hover { color: #c8a96e; background: #1a1a30; }
+.av-folder-del-btn:hover { color: #ff6060; background: #2a1a1a; }
+
+/* ── Folder children container ── */
+.av-folder-children {
+  padding-left: 14px;
+  display: none;
+  border-left: 1px solid #1e1e40;
+  margin-left: 16px;
+}
+
+.av-folder-children.av-open { display: block; }
+
+.av-folder-empty {
+  padding: 4px 10px;
+  font-size: 10.5px;
+  color: #303055;
+  font-style: italic;
+}
+
+/* ── Uncategorized section ── */
+.av-uncat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #404068;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border-top: 1px solid #181832;
+  margin-top: 3px;
+}
+
+/* ── Build card (clickable) ── */
+.av-build-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
+}
+
+.av-build-card:hover { background: #131330; }
+
+/* Click indicator */
+.av-build-card::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.av-build-card:hover::after { background: #c8a96e55; }
+
+/* Thumbnail */
+.av-build-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #14143a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  overflow: hidden;
+}
+
+.av-build-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+}
+
+/* Info */
+.av-build-info { flex: 1; min-width: 0; }
+
+.av-build-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c0c0e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.av-build-meta {
+  font-size: 10px;
+  color: #505080;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* Action buttons (hover-reveal) */
+.av-build-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.av-build-card:hover .av-build-actions { opacity: 1; }
+
+.av-build-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: #505080;
+  transition: background 0.12s, color 0.12s;
+}
+
+.av-build-actions button:hover { background: #1e1e40; }
+.av-build-actions .av-move-btn:hover { color: #c8a96e; }
+.av-build-actions .av-del-btn:hover { color: #ff6060; }
+
+/* ── Empty state ── */
+.av-empty {
+  padding: 24px 16px;
+  color: #404068;
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+/* ── Modal ── */
+#av-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+#av-modal.av-hidden { display: none; }
+
+#av-modal-box {
+  background: #141432;
+  border: 1px solid #c8a96e55;
+  border-radius: 10px;
+  padding: 18px 20px;
+  width: 250px;
+}
+
+#av-modal-box h4 {
+  color: #c8a96e;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+#av-modal-folder {
+  width: 100%;
+  padding: 7px 8px;
+  background: #0d0d1e;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+#av-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+#av-modal-actions button {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#av-modal-cancel { background: #252550; color: #c0c0e0; }
+#av-modal-cancel:hover { background: #353565; }
+#av-modal-confirm { background: #c8a96e; color: #0d0d1e; }
+#av-modal-confirm:hover { background: #dfc080; }
