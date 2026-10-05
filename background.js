@@ -2,13 +2,15 @@
 // No in-memory state. All state lives in chrome.storage.local.
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const { folders } = await chrome.storage.local.get('folders');
+  const { folders, builds, settings } = await chrome.storage.local.get(['folders', 'builds', 'settings']);
   if (!folders) {
     await chrome.storage.local.set({ folders: [] });
   }
-  const { builds } = await chrome.storage.local.get('builds');
   if (!builds) {
     await chrome.storage.local.set({ builds: [] });
+  }
+  if (!settings) {
+    await chrome.storage.local.set({ settings: { tocHeight: 220, sidebarWidth: 272 } });
   }
 });
 
@@ -16,7 +18,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       if (message.type === 'GET_DATA') {
-        const data = await chrome.storage.local.get(['folders', 'builds']);
+        const data = await chrome.storage.local.get(['folders', 'builds', 'settings']);
         sendResponse({ ok: true, data });
 
       } else if (message.type === 'SAVE_BUILD') {
@@ -64,6 +66,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const idx = builds.findIndex(b => b.id === message.buildId);
         if (idx >= 0) builds[idx].folderId = message.folderId;
         await chrome.storage.local.set({ builds });
+        sendResponse({ ok: true });
+
+      } else if (message.type === 'GET_SETTINGS') {
+        const { settings = {} } = await chrome.storage.local.get('settings');
+        sendResponse({ ok: true, settings });
+
+      } else if (message.type === 'SAVE_SETTINGS') {
+        const { settings = {} } = await chrome.storage.local.get('settings');
+        const updated = { ...settings, ...message.settings };
+        await chrome.storage.local.set({ settings: updated });
+        sendResponse({ ok: true, settings: updated });
+
+      } else if (message.type === 'IMPORT_DATA') {
+        const toSet = {};
+        if (message.folders) toSet.folders = message.folders;
+        if (message.builds) toSet.builds = message.builds;
+        if (message.settings) toSet.settings = message.settings;
+        await chrome.storage.local.set(toSet);
         sendResponse({ ok: true });
 
       } else {

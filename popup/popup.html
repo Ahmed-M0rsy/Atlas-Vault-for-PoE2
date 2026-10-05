@@ -10,8 +10,14 @@
   <div id="app">
     <!-- Header -->
     <header id="av-header">
-      <div id="av-logo">⚗️ Atlas Vault</div>
-      <div id="av-subtitle">PoE2 Build Manager</div>
+      <div class="av-header-left">
+        <div id="av-logo">⚗️ Atlas Vault</div>
+        <div id="av-subtitle">PoE2 Build Manager</div>
+      </div>
+      <div class="av-header-actions">
+        <button id="av-export-btn" class="av-hdr-btn" title="Export all builds, folders & settings">📤 Export</button>
+        <button id="av-import-btn" class="av-hdr-btn" title="Import builds, folders & settings">📥 Import</button>
+      </div>
     </header>
 
     <!-- Save + folder select -->
@@ -48,6 +54,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Toast -->
+  <div id="av-toast"></div>
 
   <script src="popup.js"></script>
 </body>

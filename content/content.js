@@ -25,10 +25,27 @@ function escHtml(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Settings & Layout State ──────────────────────────────────────────────────
+let currentTocHeight = 220;
+let currentSidebarWidth = 272;
+
 // ── Data helpers (direct storage access in content script) ───────────────────
 async function loadData() {
-  const { folders = [], builds = [] } = await chrome.storage.local.get(['folders', 'builds']);
-  return { folders, builds };
+  const { folders = [], builds = [], settings = {} } = await chrome.storage.local.get(['folders', 'builds', 'settings']);
+  if (settings.tocHeight && typeof settings.tocHeight === 'number') {
+    currentTocHeight = settings.tocHeight;
+    const tocEl = document.getElementById('av-toc-section');
+    if (tocEl && tocOpen && tocEl.style.display !== 'none') {
+      tocEl.style.height = `${currentTocHeight}px`;
+    }
+  }
+  if (settings.sidebarWidth && typeof settings.sidebarWidth === 'number') {
+    currentSidebarWidth = settings.sidebarWidth;
+    if (sidebar && !sidebar.classList.contains('av-collapsed')) {
+      sidebar.style.width = `${currentSidebarWidth}px`;
+    }
+  }
+  return { folders, builds, settings };
 }
 
 async function saveBuild(build) {
@@ -85,6 +102,369 @@ function extractBuildMeta() {
   };
 }
 
+// ── Export / Import helpers ──────────────────────────────────────────────────
+async function exportData() {
+  const { folders = [], builds = [], settings = {} } = await chrome.storage.local.get(['folders', 'builds', 'settings']);
+  settings.tocHeight = currentTocHeight;
+  settings.sidebarWidth = currentSidebarWidth;
+
+  const backup = {
+    app: 'Atlas Vault',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    folders,
+    builds,
+    settings
+  };
+
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `atlas-vault-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 200);
+
+  showToast('📤 Export Complete', `Exported ${folders.length} folder(s) and ${builds.length} build(s).`);
+}
+
+function triggerImport() {
+  let input = document.getElementById('av-import-file-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'av-import-file-input';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+  }
+
+  input.value = '';
+  input.onchange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        const normalized = normalizeImportData(parsed);
+        if (normalized.builds.length === 0 && normalized.folders.length === 0) {
+          showToast('❌ Import Error', 'No valid builds or folders found in file.');
+          return;
+        }
+        showImportModal(normalized);
+      } catch (err) {
+        showToast('❌ Import Error', 'Invalid JSON backup file.');
+      }
+    };
+    reader.onerror = () => {
+      showToast('❌ Import Error', 'Could not read selected file.');
+    };
+    reader.readAsText(file);
+  };
+
+  input.click();
+}
+
+function normalizeImportData(raw) {
+  let folders = [];
+  let builds = [];
+  let settings = null;
+  let exportedAt = null;
+
+  if (Array.isArray(raw)) {
+    builds = raw;
+  } else if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.folders)) folders = raw.folders;
+    if (Array.isArray(raw.builds)) builds = raw.builds;
+    if (raw.settings && typeof raw.settings === 'object') settings = raw.settings;
+    if (raw.exportedAt) exportedAt = raw.exportedAt;
+  }
+
+  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
+    id: b.id || crypto.randomUUID(),
+    title: b.title || 'Untitled Build',
+    author: b.author || '',
+    buildClass: b.buildClass || '',
+    url: b.url || '',
+    thumbnail: b.thumbnail || '',
+    folderId: b.folderId || null,
+    savedAt: b.savedAt || Date.now()
+  }));
+
+  folders = folders.filter(f => f && f.name).map(f => ({
+    id: f.id || crypto.randomUUID(),
+    name: String(f.name).trim(),
+    createdAt: f.createdAt || Date.now()
+  }));
+
+  return { folders, builds, settings, exportedAt };
+}
+
+function showImportModal(importedData) {
+  let modal = document.getElementById('av-import-modal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'av-import-modal';
+  modal.className = 'av-modal-backdrop';
+
+  const dateFormatted = importedData.exportedAt
+    ? new Date(importedData.exportedAt).toLocaleDateString() + ' ' + new Date(importedData.exportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  modal.innerHTML = `
+    <div class="av-modal-card">
+      <div class="av-modal-header">
+        <span class="av-modal-title">📥 Import Atlas Vault Data</span>
+        <button class="av-modal-close" title="Close">✕</button>
+      </div>
+      <div class="av-modal-body">
+        <p class="av-modal-desc">Backup contents detected:</p>
+        <div class="av-import-stats">
+          <div class="av-import-stat"><strong>${importedData.folders.length}</strong><span>Folders</span></div>
+          <div class="av-import-stat"><strong>${importedData.builds.length}</strong><span>Builds</span></div>
+          <div class="av-import-stat"><strong>${importedData.settings ? 'Yes' : 'No'}</strong><span>Settings</span></div>
+        </div>
+        ${dateFormatted ? `<div class="av-import-meta">📅 Exported: ${escHtml(dateFormatted)}</div>` : ''}
+        <div class="av-import-help">
+          <b>Merge Data:</b> Keep existing builds and add incoming items without duplicates.<br/>
+          <b>Replace All:</b> Overwrite existing builds and settings completely.
+        </div>
+      </div>
+      <div class="av-modal-actions">
+        <button id="av-btn-import-cancel" class="av-btn-secondary">Cancel</button>
+        <button id="av-btn-import-replace" class="av-btn-danger" title="Overwrite current data">Replace All</button>
+        <button id="av-btn-import-merge" class="av-btn-primary" title="Keep existing and add incoming">Merge Data</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('.av-modal-close').addEventListener('click', close);
+  modal.querySelector('#av-btn-import-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  modal.querySelector('#av-btn-import-merge').addEventListener('click', async () => {
+    close();
+    await executeMerge(importedData);
+    await loadAndRender();
+    showToast('✅ Import Complete', `Merged ${importedData.builds.length} build(s) & ${importedData.folders.length} folder(s).`);
+  });
+
+  modal.querySelector('#av-btn-import-replace').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to replace ALL current builds and folders with this backup? This cannot be undone.')) return;
+    close();
+    await executeReplace(importedData);
+    await loadAndRender();
+    showToast('✅ Import Complete', `Restored ${importedData.builds.length} build(s) & ${importedData.folders.length} folder(s).`);
+  });
+}
+
+async function executeMerge(imported) {
+  const { folders: curFolders = [], builds: curBuilds = [], settings: curSettings = {} } =
+    await chrome.storage.local.get(['folders', 'builds', 'settings']);
+
+  const folderIdMap = new Map();
+  const finalFolders = [...curFolders];
+
+  imported.folders.forEach(impFolder => {
+    const existing = finalFolders.find(f => f.name.toLowerCase() === impFolder.name.toLowerCase());
+    if (existing) {
+      folderIdMap.set(impFolder.id, existing.id);
+    } else {
+      const newFolder = { ...impFolder, id: impFolder.id || crypto.randomUUID() };
+      finalFolders.push(newFolder);
+      folderIdMap.set(impFolder.id, newFolder.id);
+    }
+  });
+
+  const finalBuilds = [...curBuilds];
+  imported.builds.forEach(impBuild => {
+    const targetFolderId = impBuild.folderId ? (folderIdMap.get(impBuild.folderId) || impBuild.folderId) : null;
+    const validFolderId = finalFolders.some(f => f.id === targetFolderId) ? targetFolderId : null;
+
+    const existingIdx = finalBuilds.findIndex(b => (impBuild.url && b.url === impBuild.url) || b.id === impBuild.id);
+    if (existingIdx >= 0) {
+      finalBuilds[existingIdx] = {
+        ...finalBuilds[existingIdx],
+        ...impBuild,
+        folderId: validFolderId !== undefined ? validFolderId : finalBuilds[existingIdx].folderId
+      };
+    } else {
+      finalBuilds.push({
+        ...impBuild,
+        id: impBuild.id || crypto.randomUUID(),
+        folderId: validFolderId
+      });
+    }
+  });
+
+  const finalSettings = { ...curSettings, ...(imported.settings || {}) };
+
+  await chrome.storage.local.set({
+    folders: finalFolders,
+    builds: finalBuilds,
+    settings: finalSettings
+  });
+
+  if (finalSettings.tocHeight) {
+    currentTocHeight = finalSettings.tocHeight;
+    const tocSection = document.getElementById('av-toc-section');
+    if (tocSection && tocOpen) tocSection.style.height = `${currentTocHeight}px`;
+  }
+  if (finalSettings.sidebarWidth) {
+    currentSidebarWidth = finalSettings.sidebarWidth;
+    if (sidebar && !sidebar.classList.contains('av-collapsed')) {
+      sidebar.style.width = `${currentSidebarWidth}px`;
+    }
+  }
+}
+
+async function executeReplace(imported) {
+  const finalSettings = imported.settings || {};
+  await chrome.storage.local.set({
+    folders: imported.folders,
+    builds: imported.builds,
+    settings: finalSettings
+  });
+
+  if (finalSettings.tocHeight) {
+    currentTocHeight = finalSettings.tocHeight;
+    const tocSection = document.getElementById('av-toc-section');
+    if (tocSection && tocOpen) tocSection.style.height = `${currentTocHeight}px`;
+  }
+  if (finalSettings.sidebarWidth) {
+    currentSidebarWidth = finalSettings.sidebarWidth;
+    if (sidebar && !sidebar.classList.contains('av-collapsed')) {
+      sidebar.style.width = `${currentSidebarWidth}px`;
+    }
+  }
+}
+
+// ── ToC & Sidebar Resizers ───────────────────────────────────────────────────
+function initTocResizer(resizer, tocSection) {
+  let isDragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    isDragging = true;
+    startY = e.clientY;
+    startH = tocSection.getBoundingClientRect().height;
+    resizer.classList.add('av-active');
+    document.body.classList.add('av-resizing');
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    e.preventDefault();
+  };
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    const delta = e.clientY - startY;
+    let newH = Math.round(startH + delta);
+    const minH = 60;
+    const sidebarEl = document.getElementById('av-sidebar');
+    const sidebarH = sidebarEl ? sidebarEl.clientHeight : window.innerHeight;
+    const maxH = Math.max(minH, sidebarH - 240);
+
+    newH = Math.max(minH, Math.min(newH, maxH));
+    currentTocHeight = newH;
+    tocSection.style.height = `${newH}px`;
+  };
+
+  const onMouseUp = async () => {
+    if (!isDragging) return;
+    isDragging = false;
+    resizer.classList.remove('av-active');
+    document.body.classList.remove('av-resizing');
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+
+    const { settings = {} } = await chrome.storage.local.get('settings');
+    settings.tocHeight = currentTocHeight;
+    await chrome.storage.local.set({ settings });
+  };
+
+  const onDoubleClick = async () => {
+    currentTocHeight = 220;
+    tocSection.style.height = '220px';
+    const { settings = {} } = await chrome.storage.local.get('settings');
+    settings.tocHeight = 220;
+    await chrome.storage.local.set({ settings });
+    showToast('Reset ToC Size', 'Table of Contents height reset to 220px.');
+  };
+
+  resizer.addEventListener('mousedown', onMouseDown);
+  resizer.addEventListener('dblclick', onDoubleClick);
+}
+
+function initSidebarWidthResizer(sidebarEl) {
+  const edgeResizer = document.createElement('div');
+  edgeResizer.id = 'av-sidebar-edge-resizer';
+  edgeResizer.title = 'Drag left/right to resize sidebar width (Double-click to reset)';
+  sidebarEl.appendChild(edgeResizer);
+
+  let isDragging = false;
+  let startX = 0;
+  let startW = 0;
+
+  edgeResizer.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (sidebarEl.classList.contains('av-collapsed')) return;
+    isDragging = true;
+    startX = e.clientX;
+    startW = sidebarEl.getBoundingClientRect().width;
+    edgeResizer.classList.add('av-active');
+    document.body.classList.add('av-col-resizing');
+
+    const onMouseMove = (ev) => {
+      if (!isDragging) return;
+      const deltaX = ev.clientX - startX;
+      let newW = Math.round(startW - deltaX);
+      newW = Math.max(240, Math.min(newW, Math.min(650, window.innerWidth - 100)));
+      currentSidebarWidth = newW;
+      sidebarEl.style.width = `${newW}px`;
+    };
+
+    const onMouseUp = async () => {
+      if (!isDragging) return;
+      isDragging = false;
+      edgeResizer.classList.remove('av-active');
+      document.body.classList.remove('av-col-resizing');
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      const { settings = {} } = await chrome.storage.local.get('settings');
+      settings.sidebarWidth = currentSidebarWidth;
+      await chrome.storage.local.set({ settings });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    e.preventDefault();
+  });
+
+  edgeResizer.addEventListener('dblclick', async () => {
+    currentSidebarWidth = 272;
+    sidebarEl.style.width = '272px';
+    const { settings = {} } = await chrome.storage.local.get('settings');
+    settings.sidebarWidth = 272;
+    await chrome.storage.local.set({ settings });
+    showToast('Reset Sidebar Width', 'Sidebar width reset to 272px.');
+  });
+}
+
 // ── Sidebar build ─────────────────────────────────────────────────────────────
 let sidebar = null;
 let tocOpen = true;
@@ -96,6 +476,9 @@ function createSidebar() {
 
   sidebar = document.createElement('div');
   sidebar.id = 'av-sidebar';
+  if (currentSidebarWidth) {
+    sidebar.style.width = `${currentSidebarWidth}px`;
+  }
 
   // ── Toggle tab (sticks out to the left) ──
   const toggleTab = document.createElement('div');
@@ -119,12 +502,18 @@ function createSidebar() {
   expandedWrap.className = 'av-expanded-only';
   expandedWrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;';
 
-  // Header
+  // Header with Import/Export
   const header = document.createElement('div');
   header.id = 'av-sidebar-header';
   header.innerHTML = `
-    <div id="av-sidebar-logo">⚗️ Atlas Vault</div>
-    <div id="av-sidebar-sub">PoE2 Build Manager</div>
+    <div class="av-header-left">
+      <div id="av-sidebar-logo">⚗️ Atlas Vault</div>
+      <div id="av-sidebar-sub">PoE2 Build Manager</div>
+    </div>
+    <div class="av-header-actions">
+      <button id="av-sb-export-btn" class="av-hdr-btn" title="Export all builds, folders & settings">📤 Export</button>
+      <button id="av-sb-import-btn" class="av-hdr-btn" title="Import builds, folders & settings">📥 Import</button>
+    </div>
   `;
   expandedWrap.appendChild(header);
 
@@ -165,15 +554,32 @@ function createSidebar() {
   `;
   expandedWrap.appendChild(tocSection);
 
+  // ToC resizer splitter
+  const tocResizer = document.createElement('div');
+  tocResizer.id = 'av-toc-resizer';
+  tocResizer.title = 'Drag up/down to resize Table of Contents & Builds (Double-click to reset)';
+  tocResizer.style.display = 'none';
+  tocResizer.innerHTML = `<div class="av-resizer-grip"></div>`;
+  expandedWrap.appendChild(tocResizer);
+  initTocResizer(tocResizer, tocSection);
+
   // Tree view
   const tree = document.createElement('div');
   tree.id = 'av-sb-tree';
   expandedWrap.appendChild(tree);
 
   sidebar.appendChild(expandedWrap);
+
+  // Sidebar horizontal edge resizer
+  initSidebarWidthResizer(sidebar);
+
   document.body.appendChild(sidebar);
 
   // ── Wire up events ──
+
+  // Export / Import
+  header.querySelector('#av-sb-export-btn').addEventListener('click', exportData);
+  header.querySelector('#av-sb-import-btn').addEventListener('click', triggerImport);
 
   // Save button
   saveBar.querySelector('#av-sb-save-btn').addEventListener('click', handleSave);
@@ -195,6 +601,13 @@ function createSidebar() {
     tocOpen = !tocOpen;
     tocSection.querySelector('#av-toc-section-arrow').classList.toggle('av-open', tocOpen);
     tocSection.querySelector('#av-toc-links-sb').classList.toggle('av-open', tocOpen);
+    const resizer = document.getElementById('av-toc-resizer');
+    if (resizer) resizer.style.display = tocOpen ? 'flex' : 'none';
+    if (tocOpen) {
+      tocSection.style.height = `${currentTocHeight}px`;
+    } else {
+      tocSection.style.height = 'auto';
+    }
   });
 
   loadAndRender();
@@ -490,6 +903,14 @@ function tryInjectToC() {
   });
 
   tocEl.style.display = 'flex';
+  const resizer = document.getElementById('av-toc-resizer');
+  if (tocOpen) {
+    tocEl.style.height = `${currentTocHeight}px`;
+    if (resizer) resizer.style.display = 'flex';
+  } else {
+    tocEl.style.height = 'auto';
+    if (resizer) resizer.style.display = 'none';
+  }
   tocInjected = true;
   setupScrollSpy(links, linksContainer);
 }
@@ -516,13 +937,6 @@ function setupScrollSpy(originalLinks, container) {
   });
 }
 
-// ── Open tab (content scripts can't open tabs directly — use service worker) ──
-// Add a listener handler in background.js for _OPEN_TAB
-// But actually, content scripts CAN use window.open for new tabs
-
-// Override: use window.open instead of message passing for simplicity
-// (Replacing the createBuildItem click handler to use window.open)
-
 // ── SPA navigation + mutation watching ───────────────────────────────────────
 function resetToC() {
   const tocEl = document.getElementById('av-toc-section');
@@ -531,6 +945,8 @@ function resetToC() {
     const linksContainer = document.getElementById('av-toc-links-sb');
     if (linksContainer) linksContainer.innerHTML = '';
   }
+  const resizer = document.getElementById('av-toc-resizer');
+  if (resizer) resizer.style.display = 'none';
   if (scrollSpyObserver) { scrollSpyObserver.disconnect(); scrollSpyObserver = null; }
   tocInjected = false;
 }
@@ -556,7 +972,7 @@ const navObserver = new MutationObserver(() => {
 
 // ── Storage change listener ───────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes.folders || changes.builds)) {
+  if (area === 'local' && (changes.folders || changes.builds || changes.settings)) {
     loadAndRender();
   }
 });
