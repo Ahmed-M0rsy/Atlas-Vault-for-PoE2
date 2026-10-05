@@ -101,7 +101,6 @@ Atlas_Vault_for_PoE2/
         ├── popup.js          # Controller for popup interactions & metadata scraping
         └── popup.css         # Popup styling
 ```
-
 ---
 
 ## 🔒 Permissions & Privacy
@@ -123,4 +122,4 @@ Atlas Vault adheres strictly to **Manifest V3** security standards:
 ---
 
 ## ⚖️ Disclaimer
-Atlas Vault is a third-party fan project and is not affiliated with, endorsed by, or associated with **Mobalytics** or **Grinding Gear Games**. All game assets and trademarks belong to their respective owners.
+Atlas Vault is a third-party fan project vibe coded on antigravity and is not affiliated with, endorsed by, or associated with **Mobalytics** or **Grinding Gear Games**. All game assets and trademarks belong to their respective owners.
