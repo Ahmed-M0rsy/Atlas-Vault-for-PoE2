@@ -7,6 +7,94 @@ let folderExpanded = {}; // { [folderId]: bool }
 let searchQuery = '';
 let movingBuildId = null;
 
+const ZOOM_MIN = 0.7, ZOOM_MAX = 1.6, ZOOM_STEP = 0.1;
+const SORT_MODES = ['manual', 'newest', 'oldest', 'az', 'za'];
+
+function currentSort() {
+  const s = state.settings?.buildSort;
+  return SORT_MODES.includes(s) ? s : 'newest';
+}
+
+function currentZoom() {
+  const z = Number(state.settings?.uiZoom);
+  return Number.isFinite(z) ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) : 1;
+}
+
+function applyZoom() {
+  const z = currentZoom();
+  // Grow the popup window with zoom so ratios stay fixed: the zoomed content
+  // exactly fills the widened body instead of overflowing/squishing.
+  document.body.style.width = `${Math.round(360 * z)}px`;
+  document.getElementById('app').style.zoom = String(z);
+  const label = document.getElementById('av-zoom-label');
+  if (label) label.textContent = `${Math.round(z * 100)}%`;
+  const sortSel = document.getElementById('av-sort');
+  if (sortSel) sortSel.value = currentSort();
+}
+
+async function persistSettings(patch) {
+  state.settings = { ...state.settings, ...patch };
+  applyZoom();
+  await chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', settings: patch });
+}
+
+function sortBuilds(list) {
+  const mode = currentSort();
+  const arr = [...list];
+  if (mode === 'az') return arr.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  if (mode === 'za') return arr.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+  if (mode === 'oldest') return arr.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+  if (mode === 'manual') {
+    const hasOrder = arr.some(b => typeof b.order === 'number');
+    if (!hasOrder) return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    return arr.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+  }
+  return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)); // newest
+}
+
+// Persist the currently displayed order as manual order
+async function persistManualOrder(orderedBuilds) {
+  const orderedIds = orderedBuilds.map(b => b.id);
+  // Assign local order immediately so re-render is stable
+  orderedBuilds.forEach((b, i) => {
+    const target = state.builds.find(x => x.id === b.id);
+    if (target) target.order = i;
+  });
+  await chrome.runtime.sendMessage({ type: 'REORDER_BUILDS', orderedIds });
+}
+
+async function moveBuild(buildId, dir) {
+  // Reorder within its own group (folder or uncategorized), then persist global order
+  const build = state.builds.find(b => b.id === buildId);
+  if (!build) return;
+  // Seed manual order from the current display order on first use
+  if (currentSort() !== 'manual' || !state.builds.some(b => typeof b.order === 'number')) {
+    sortBuilds(state.builds).forEach((b, i) => {
+      const t = state.builds.find(x => x.id === b.id);
+      if (t) t.order = i;
+    });
+  }
+  const group = state.builds.filter(b => (b.folderId || null) === (build.folderId || null));
+  const sorted = sortBuilds(group);
+  // In case we just seeded, force manual ordering for the swap calculation
+  sorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const idx = sorted.findIndex(b => b.id === buildId);
+  const swapIdx = idx + dir;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return;
+  const tmp = sorted[idx].order;
+  sorted[idx].order = sorted[swapIdx].order;
+  sorted[swapIdx].order = tmp;
+  if (currentSort() !== 'manual') {
+    await persistSettings({ buildSort: 'manual' });
+    const sel = document.getElementById('av-sort');
+    if (sel) sel.value = 'manual';
+  }
+  const allOrdered = [...state.builds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  await persistManualOrder(allOrdered);
+  await loadData();
+  renderAll();
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
@@ -36,6 +124,27 @@ function bindEvents() {
   document.getElementById('av-search').addEventListener('input', e => {
     searchQuery = e.target.value.toLowerCase();
     renderTree();
+  });
+
+  // Sort
+  document.getElementById('av-sort').addEventListener('change', async e => {
+    const v = e.target.value;
+    if (!SORT_MODES.includes(v)) return;
+    await persistSettings({ buildSort: v });
+    renderTree();
+  });
+
+  // Zoom (resize UI elements + font)
+  document.getElementById('av-zoom-in').addEventListener('click', async () => {
+    const z = Math.min(ZOOM_MAX, Math.round((currentZoom() + ZOOM_STEP) * 100) / 100);
+    await persistSettings({ uiZoom: z });
+  });
+  document.getElementById('av-zoom-out').addEventListener('click', async () => {
+    const z = Math.max(ZOOM_MIN, Math.round((currentZoom() - ZOOM_STEP) * 100) / 100);
+    await persistSettings({ uiZoom: z });
+  });
+  document.getElementById('av-zoom-label').addEventListener('dblclick', async () => {
+    await persistSettings({ uiZoom: 1 });
   });
 
   // New folder
@@ -98,6 +207,7 @@ async function handleCreateFolder() {
 
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll() {
+  applyZoom();
   populateFolderSelects();
   renderTree();
 }
@@ -178,16 +288,19 @@ function renderTree() {
     // Children container
     const children = document.createElement('div');
     children.className = `av-folder-children ${isOpen ? 'av-open' : ''}`;
+    children.dataset.folderId = folder.id;
 
     if (folderBuilds.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'av-folder-empty';
-      empty.textContent = 'Empty folder';
+      empty.className = 'av-folder-empty av-drop-empty';
+      empty.textContent = 'Empty folder — drop builds here';
       children.appendChild(empty);
+      enableDropZone(children, folder.id);
     } else {
-      folderBuilds.sort((a, b) => b.savedAt - a.savedAt).forEach(build => {
+      sortBuilds(folderBuilds).forEach(build => {
         children.appendChild(createBuildCard(build));
       });
+      enableDropZone(children, folder.id);
     }
 
     // Toggle
@@ -215,6 +328,9 @@ function renderTree() {
       renderAll();
     });
 
+    // Drop onto the header itself moves the build into this folder (appends)
+    enableDropZone(header, folder.id);
+
     node.append(header, children);
     tree.appendChild(node);
   });
@@ -236,9 +352,14 @@ function renderTree() {
       empty.innerHTML = 'No builds saved yet.<br/>Open a Mobalytics build page and click <b>Save Current Build</b>.';
       tree.appendChild(empty);
     } else {
-      uncat.sort((a, b) => b.savedAt - a.savedAt).forEach(build => {
-        tree.appendChild(createBuildCard(build));
+      const uncatWrap = document.createElement('div');
+      uncatWrap.id = 'av-uncat-wrap';
+      uncatWrap.dataset.folderId = '';
+      sortBuilds(uncat).forEach(build => {
+        uncatWrap.appendChild(createBuildCard(build));
       });
+      tree.appendChild(uncatWrap);
+      enableDropZone(uncatWrap, null);
     }
   }
 
@@ -250,12 +371,22 @@ function renderTree() {
   }
 }
 
-// ── Build card (whole card clickable) ─────────────────────────────────────────
+// ── Build card (whole card clickable + drag & drop) ─────────────────────────────
 function createBuildCard(build) {
   const card = document.createElement('div');
   card.className = 'av-build-card';
   card.setAttribute('role', 'treeitem');
   card.title = `Open: ${build.title}`;
+  card.dataset.buildId = build.id;
+  card.draggable = !searchQuery;
+  if (searchQuery) card.title = `Open: ${build.title} (reorder unavailable while searching)`;
+
+  // Drag grip
+  const grip = document.createElement('span');
+  grip.className = 'av-drag-grip';
+  grip.title = searchQuery ? 'Clear search to drag & reorder' : 'Drag to reorder / move across folders';
+  grip.textContent = '⠿';
+  grip.setAttribute('aria-hidden', 'true');
 
   // Thumbnail
   const thumb = document.createElement('div');
@@ -279,6 +410,33 @@ function createBuildCard(build) {
   const actions = document.createElement('div');
   actions.className = 'av-build-actions';
 
+  const upBtn = document.createElement('button');
+  upBtn.className = 'av-order-btn';
+  upBtn.title = 'Move up (switches to Manual sort)';
+  upBtn.textContent = '⬆️';
+  upBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    moveBuild(build.id, -1);
+  });
+
+  const downBtn = document.createElement('button');
+  downBtn.className = 'av-order-btn';
+  downBtn.title = 'Move down (switches to Manual sort)';
+  downBtn.textContent = '⬇️';
+  downBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    moveBuild(build.id, 1);
+  });
+
+  const renameBtn = document.createElement('button');
+  renameBtn.className = 'av-rename-btn';
+  renameBtn.title = 'Rename build';
+  renameBtn.textContent = '✏️';
+  renameBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    startBuildRename(build, card);
+  });
+
   const moveBtn = document.createElement('button');
   moveBtn.className = 'av-move-btn';
   moveBtn.title = 'Move to folder';
@@ -300,16 +458,179 @@ function createBuildCard(build) {
     renderAll();
   });
 
-  actions.append(moveBtn, delBtn);
-  card.append(thumb, info, actions);
+  actions.append(upBtn, downBtn, renameBtn, moveBtn, delBtn);
+  card.append(grip, thumb, info, actions);
+
+  // ── Drag & drop ──
+  card.addEventListener('dragstart', e => {
+    if (card.querySelector('.av-build-rename-input')) { e.preventDefault(); return; }
+    e.dataTransfer.setData('text/plain', build.id);
+    e.dataTransfer.effectAllowed = 'move';
+    card.classList.add('av-dragging');
+  });
+  card.addEventListener('dragend', () => {
+    card.classList.remove('av-dragging');
+    document.querySelectorAll('.av-drop-target,.av-drop-before,.av-drop-after').forEach(el => {
+      el.classList.remove('av-drop-target', 'av-drop-before', 'av-drop-after');
+    });
+  });
+  card.addEventListener('dragover', e => {
+    if (searchQuery) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = card.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    card.classList.toggle('av-drop-before', !after);
+    card.classList.toggle('av-drop-after', after);
+  });
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('av-drop-before', 'av-drop-after');
+  });
+  card.addEventListener('drop', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    const rect = card.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    card.classList.remove('av-drop-before', 'av-drop-after');
+    if (!sourceId || sourceId === build.id) return;
+    const zone = card.closest('[data-folder-id]');
+    const targetFolderId = zone && zone.dataset.folderId ? zone.dataset.folderId : (build.folderId || null);
+    await handleBuildDrop(sourceId, targetFolderId, build.id, after);
+  });
 
   // ── WHOLE CARD CLICK → open in new tab ──
   card.addEventListener('click', e => {
     if (e.target.closest('.av-build-actions')) return;
+    if (e.target.closest('.av-build-rename-input')) return;
     chrome.tabs.create({ url: build.url });
   });
 
   return card;
+}
+
+// ── Drag & drop: zones + persistence (single-message cross-folder move) ─────────
+function enableDropZone(zoneEl, folderId) {
+  zoneEl.addEventListener('dragover', e => {
+    if (searchQuery) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    zoneEl.classList.add('av-drop-target');
+  });
+  zoneEl.addEventListener('dragleave', e => {
+    if (e.target === zoneEl) zoneEl.classList.remove('av-drop-target');
+  });
+  zoneEl.addEventListener('drop', async e => {
+    if (e.target.closest('.av-build-card')) return;
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    zoneEl.classList.remove('av-drop-target');
+    if (!sourceId) return;
+    await handleBuildDrop(sourceId, folderId || null, null, true);
+  });
+}
+
+async function handleBuildDrop(sourceId, targetFolderId, beforeBuildId, insertAfter) {
+  const source = state.builds.find(b => b.id === sourceId);
+  if (!source) return;
+  const targetFid = targetFolderId || null;
+  const groupAll = state.builds.filter(b => (b.folderId || null) === targetFid && b.id !== sourceId);
+  const sortedGroup = sortBuilds(groupAll);
+  sortedGroup.forEach((b, i) => {
+    const t = state.builds.find(x => x.id === b.id);
+    if (t && typeof t.order !== 'number') t.order = i;
+  });
+  const ordered = [...sortedGroup].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  let newOrder;
+  if (!beforeBuildId) {
+    newOrder = ordered.length ? (ordered[ordered.length - 1].order ?? ordered.length - 1) + 1 : 0;
+  } else {
+    const idx = ordered.findIndex(b => b.id === beforeBuildId);
+    if (idx < 0) newOrder = ordered.length ? (ordered[ordered.length - 1].order ?? 0) + 1 : 0;
+    else if (!insertAfter) {
+      newOrder = idx === 0 ? (ordered[0].order ?? 1) - 1 : ((ordered[idx - 1].order ?? 0) + (ordered[idx].order ?? 0)) / 2;
+    } else {
+      newOrder = idx === ordered.length - 1 ? (ordered[idx].order ?? 0) + 1 : ((ordered[idx].order ?? 0) + (ordered[idx + 1].order ?? 0)) / 2;
+    }
+  }
+
+  // Final local state: move source, renormalize target group to clean integers.
+  const tmpBuilds = state.builds.map(b => b.id === sourceId ? { ...b, folderId: targetFid, order: newOrder } : { ...b });
+  tmpBuilds
+    .filter(b => (b.folderId || null) === targetFid)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .forEach((b, i) => {
+      const t = tmpBuilds.find(x => x.id === b.id);
+      if (t) t.order = i * 2; // spaced integers keep future inserts stable
+    });
+
+  // Global orderedIds: per-group display sequences concatenated (display only
+  // compares order within a group, so cross-group interleave is irrelevant).
+  const folderIds = new Set(state.folders.map(f => f.id));
+  const orderedIds = [];
+  state.folders.forEach(f => {
+    tmpBuilds
+      .filter(b => b.folderId === f.id)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .forEach(b => orderedIds.push(b.id));
+  });
+  tmpBuilds
+    .filter(b => !b.folderId || !folderIds.has(b.folderId))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .forEach(b => { if (!orderedIds.includes(b.id)) orderedIds.push(b.id); });
+  tmpBuilds.forEach(b => { if (!orderedIds.includes(b.id)) orderedIds.push(b.id); });
+
+  const folders = {};
+  tmpBuilds.forEach(b => { folders[b.id] = b.folderId || null; });
+
+  if (currentSort() !== 'manual') {
+    await persistSettings({ buildSort: 'manual' });
+    const sel = document.getElementById('av-sort');
+    if (sel) sel.value = 'manual';
+  }
+  await chrome.runtime.sendMessage({ type: 'REORDER_BUILDS', orderedIds, folders });
+  await loadData();
+  renderAll();
+}
+
+// ── Inline build rename ───────────────────────────────────────────────────────
+function startBuildRename(build, card) {
+  const info = card.querySelector('.av-build-info');
+  if (!info || card.querySelector('.av-build-rename-input')) return;
+  const titleEl = info.querySelector('.av-build-title');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'av-build-rename-input';
+  input.value = build.title || '';
+  input.maxLength = 120;
+  input.setAttribute('aria-label', 'Rename build');
+  if (titleEl) titleEl.replaceWith(input);
+  else info.prepend(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = async (save) => {
+    if (done) return;
+    done = true;
+    const name = input.value.trim();
+    if (save && name && name !== build.title) {
+      await chrome.runtime.sendMessage({ type: 'RENAME_BUILD', id: build.id, title: name });
+      await loadData();
+      renderAll();
+    } else {
+      renderTree();
+    }
+  };
+
+  input.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit(true);
+    if (e.key === 'Escape') commit(false);
+  });
+  input.addEventListener('blur', () => commit(true));
+  input.addEventListener('click', e => e.stopPropagation());
 }
 
 // ── Inline folder rename ──────────────────────────────────────────────────────
@@ -462,7 +783,8 @@ function normalizeImportData(raw) {
     url: b.url || '',
     thumbnail: b.thumbnail || '',
     folderId: b.folderId || null,
-    savedAt: b.savedAt || Date.now()
+    savedAt: b.savedAt || Date.now(),
+    ...(typeof b.order === 'number' ? { order: b.order } : {})
   }));
 
   folders = folders.filter(f => f && f.name).map(f => ({

@@ -33,6 +33,22 @@
       <input type="search" id="av-search" placeholder="🔍 Search builds…" aria-label="Search builds" />
     </div>
 
+    <!-- Sort + Zoom toolbar -->
+    <div id="av-toolbar">
+      <select id="av-sort" title="Sort builds">
+        <option value="manual">⇅ Manual</option>
+        <option value="newest">🕘 Newest</option>
+        <option value="oldest">🕰️ Oldest</option>
+        <option value="az">🔤 A–Z</option>
+        <option value="za">🔤 Z–A</option>
+      </select>
+      <div id="av-zoom-controls" title="Resize UI elements and font">
+        <button id="av-zoom-out" title="Zoom out (smaller UI & font)">A−</button>
+        <span id="av-zoom-label" title="Double-click to reset to 100%">100%</span>
+        <button id="av-zoom-in" title="Zoom in (larger UI & font)">A＋</button>
+      </div>
+    </div>
+
     <!-- New folder -->
     <div id="av-new-folder-bar">
       <input type="text" id="av-new-folder-input" placeholder="New folder name…" maxlength="40" aria-label="New folder name" />

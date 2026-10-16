@@ -176,6 +176,103 @@ body {
 
 #av-new-folder-btn:hover { background: #dfc080; }
 
+/* ── Sort + Zoom toolbar ── */
+#av-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #181832;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+#av-sort {
+  flex: 1;
+  padding: 5px 6px;
+  background: #13133a;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 11px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+#av-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #13133a;
+  border: 1px solid #2a2a52;
+  border-radius: 6px;
+  padding: 1px 2px;
+  flex-shrink: 0;
+}
+
+#av-zoom-controls button {
+  background: none;
+  border: none;
+  color: #c8a96e;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 4px;
+}
+
+#av-zoom-controls button:hover { background: #24244c; }
+
+#av-zoom-label {
+  font-size: 10px;
+  color: #8080a8;
+  min-width: 36px;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+}
+
+/* Inline build rename */
+.av-build-rename-input {
+  width: 100%;
+  background: #0d0d1e;
+  border: 1px solid #c8a96e;
+  border-radius: 4px;
+  color: #c0c0e0;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.av-build-actions .av-order-btn,
+.av-build-actions .av-rename-btn { opacity: inherit; }
+
+/* ── Drag & drop ── */
+.av-drag-grip {
+  cursor: grab;
+  color: #404068;
+  font-size: 12px;
+  flex-shrink: 0;
+  padding: 2px 1px;
+  user-select: none;
+  letter-spacing: -1px;
+}
+
+.av-build-card:hover .av-drag-grip { color: #70709a; }
+.av-drag-grip:active { cursor: grabbing; }
+
+.av-build-card.av-dragging { opacity: 0.45; }
+
+.av-build-card.av-drop-before { box-shadow: inset 0 2px 0 #c8a96e; }
+.av-build-card.av-drop-after { box-shadow: inset 0 -2px 0 #c8a96e; }
+
+.av-folder-children.av-drop-target,
+#av-uncat-wrap.av-drop-target,
+.av-folder-header.av-drop-target {
+  background: #141432;
+  outline: 1px dashed #c8a96e88;
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
 /* ── Tree view ── */
 #av-tree {
   flex: 1;

@@ -10,7 +10,16 @@ chrome.runtime.onInstalled.addListener(async () => {
     await chrome.storage.local.set({ builds: [] });
   }
   if (!settings) {
-    await chrome.storage.local.set({ settings: { tocHeight: 220, sidebarWidth: 272 } });
+    await chrome.storage.local.set({ settings: { tocHeight: 220, sidebarWidth: 272, uiZoom: 1, buildSort: 'newest', sidebarCollapsed: false, sidebarMinimized: false, variantsHeight: 120 } });
+  } else {
+    // Backfill new settings keys for existing installs
+    let needsSave = false;
+    if (typeof settings.uiZoom !== 'number') { settings.uiZoom = 1; needsSave = true; }
+    if (typeof settings.buildSort !== 'string') { settings.buildSort = 'newest'; needsSave = true; }
+    if (typeof settings.sidebarCollapsed !== 'boolean') { settings.sidebarCollapsed = false; needsSave = true; }
+    if (typeof settings.sidebarMinimized !== 'boolean') { settings.sidebarMinimized = false; needsSave = true; }
+    if (typeof settings.variantsHeight !== 'number') { settings.variantsHeight = 120; needsSave = true; }
+    if (needsSave) await chrome.storage.local.set({ settings });
   }
 });
 
@@ -65,6 +74,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const { builds = [] } = await chrome.storage.local.get('builds');
         const idx = builds.findIndex(b => b.id === message.buildId);
         if (idx >= 0) builds[idx].folderId = message.folderId;
+        await chrome.storage.local.set({ builds });
+        sendResponse({ ok: true });
+
+      } else if (message.type === 'RENAME_BUILD') {
+        const { builds = [] } = await chrome.storage.local.get('builds');
+        const idx = builds.findIndex(b => b.id === message.id);
+        if (idx >= 0) {
+          const name = String(message.title || '').trim().slice(0, 120);
+          if (name) builds[idx].title = name;
+          await chrome.storage.local.set({ builds });
+        }
+        sendResponse({ ok: true });
+
+      } else if (message.type === 'REORDER_BUILDS') {
+        // message.orderedIds: array of build ids in desired global order
+        // message.folders (optional): { [buildId]: folderId|null } for cross-folder drag & drop
+        const { builds = [] } = await chrome.storage.local.get('builds');
+        const orderMap = new Map((message.orderedIds || []).map((id, i) => [id, i]));
+        const folderMap = message.folders && typeof message.folders === 'object' ? message.folders : null;
+        builds.forEach(b => {
+          if (orderMap.has(b.id)) b.order = orderMap.get(b.id);
+          if (folderMap && Object.prototype.hasOwnProperty.call(folderMap, b.id)) {
+            b.folderId = folderMap[b.id] || null;
+          }
+        });
+        // Builds not in the list keep their relative position at the end
         await chrome.storage.local.set({ builds });
         sendResponse({ ok: true });
 

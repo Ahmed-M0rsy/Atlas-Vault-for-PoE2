@@ -26,6 +26,34 @@
   width: 36px;
 }
 
+/* Fully minimized: sidebar hidden, only the floating restore pill is visible */
+#av-sidebar.av-minimized {
+  display: none;
+}
+
+#av-restore-float {
+  position: fixed;
+  right: 0;
+  top: 108px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0d0d1e;
+  border: 1px solid #c8a96e66;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  color: #c8a96e;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 12px 10px 10px;
+  cursor: pointer;
+  box-shadow: -3px 0 14px rgba(0,0,0,0.5);
+}
+
+#av-restore-float:hover { background: #1a1a36; }
+
 /* ── Toggle tab ── */
 #av-toggle-tab {
   position: absolute;
@@ -69,6 +97,10 @@
 }
 
 #av-sidebar.av-collapsed #av-sidebar-edge-resizer {
+  display: none;
+}
+
+#av-sidebar.av-minimized #av-sidebar-edge-resizer {
   display: none;
 }
 
@@ -226,6 +258,174 @@
 }
 
 #av-sb-new-folder button:hover { background: #dfc080; }
+
+/* ── Sort + Zoom toolbar ── */
+#av-sb-toolbar {
+  display: flex;
+  gap: 5px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #1a1a34;
+  align-items: center;
+}
+
+#av-sb-sort {
+  flex: 1;
+  padding: 5px 4px;
+  background: #14143a;
+  border: 1px solid #2a2a50;
+  border-radius: 6px;
+  color: #c0c0e0;
+  font-size: 10.5px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+#av-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #14143a;
+  border: 1px solid #2a2a50;
+  border-radius: 6px;
+  padding: 1px 2px;
+  flex-shrink: 0;
+}
+
+#av-zoom-controls button {
+  background: none;
+  border: none;
+  color: #c8a96e;
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+#av-zoom-controls button:hover { background: #24244c; }
+
+#av-zoom-label {
+  font-size: 9.5px;
+  color: #8080a8;
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ── Build Variants section ── */
+#av-variants-section {
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #1a1a34;
+  background: #0f0f26;
+}
+
+#av-variants-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#av-variants-header:hover { background: #14143a; }
+
+#av-variants-arrow {
+  font-size: 9px;
+  color: #6060a0;
+  transition: transform 0.15s;
+}
+
+#av-variants-arrow.av-open { transform: rotate(90deg); }
+
+#av-variants-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8a96e;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+
+#av-variants-count {
+  font-size: 10px;
+  color: #505080;
+}
+
+#av-variants-list {
+  display: none;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px 10px 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a50 #0d0d1e;
+  align-content: flex-start;
+}
+
+#av-variants-list.av-open { display: flex; }
+
+/* ── Variants Resizer Handle (mirrors ToC resizer) ── */
+#av-variants-resizer {
+  height: 8px;
+  background: #0d0d1e;
+  border-top: 1px solid #1c1c38;
+  border-bottom: 1px solid #1c1c38;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 2;
+}
+
+#av-variants-resizer:hover,
+#av-variants-resizer.av-active {
+  background: #18183a;
+  border-top-color: #c8a96e66;
+  border-bottom-color: #c8a96e66;
+}
+
+#av-variants-resizer:hover .av-resizer-grip,
+#av-variants-resizer.av-active .av-resizer-grip {
+  background: #c8a96e;
+  width: 44px;
+}
+
+.av-variant-pill {
+  background: #181836;
+  border: 1px solid #282852;
+  color: #a0a0c8;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.13s ease;
+  white-space: nowrap;
+}
+
+.av-variant-pill:hover {
+  background: #24244c;
+  border-color: #c8a96e88;
+  color: #c8a96e;
+}
+
+.av-variant-pill.av-active {
+  background: #c8a96e;
+  border-color: #c8a96e;
+  color: #0d0d1e;
+  font-weight: 700;
+}
 
 /* ── Tree view ── */
 #av-sb-tree {
@@ -407,6 +607,104 @@
 
 .av-build-item:hover .av-build-del-btn { opacity: 1; }
 .av-build-del-btn:hover { color: #ff6666; }
+
+/* Build item actions (rename + sort + move + delete, hover-reveal) */
+.av-build-item-actions {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.av-build-item:hover .av-build-item-actions { opacity: 1; }
+
+.av-build-item-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 3px;
+  border-radius: 3px;
+  color: #505080;
+  transition: background 0.12s, color 0.12s;
+}
+
+.av-build-item-actions button:hover { background: #1e1e40; color: #c8a96e; }
+.av-build-item-actions .av-build-del-btn:hover { color: #ff6666; }
+.av-build-item-actions .av-build-del-btn { opacity: 1; }
+
+.av-build-rename-input {
+  width: 100%;
+  background: #0d0d1e;
+  border: 1px solid #c8a96e;
+  border-radius: 3px;
+  color: #c0c0e0;
+  font-size: 11px;
+  padding: 2px 5px;
+}
+
+/* ── Drag & drop ── */
+.av-drag-grip {
+  cursor: grab;
+  color: #404068;
+  font-size: 12px;
+  flex-shrink: 0;
+  padding: 2px 1px;
+  user-select: none;
+  letter-spacing: -1px;
+}
+
+.av-build-item:hover .av-drag-grip { color: #70709a; }
+.av-drag-grip:active { cursor: grabbing; }
+
+.av-build-item.av-dragging {
+  opacity: 0.45;
+}
+
+.av-build-item.av-drop-before {
+  box-shadow: inset 0 2px 0 #c8a96e;
+}
+
+.av-build-item.av-drop-after {
+  box-shadow: inset 0 -2px 0 #c8a96e;
+}
+
+.av-folder-children.av-drop-target,
+#av-uncat-wrap.av-drop-target,
+.av-folder-header.av-drop-target {
+  background: #141432;
+  outline: 1px dashed #c8a96e88;
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
+body.av-dnd-active .av-build-item {
+  cursor: grabbing;
+}
+
+/* Restore button in minimized strip */
+#av-restore-btn {
+  background: #181836;
+  border: 1px solid #c8a96e66;
+  color: #c8a96e;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 7px;
+}
+
+#av-restore-btn:hover { background: #24244c; }
+
+.av-collapsed-hint {
+  font-size: 9px;
+  color: #505080;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+}
+
+.av-collapsed-only { cursor: pointer; }
 
 /* ── Empty states ── */
 .av-tree-empty {

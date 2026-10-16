@@ -5,37 +5,45 @@
 [![Target](https://img.shields.io/badge/Platform-Mobalytics%20PoE2-blueviolet?style=flat-square)](https://mobalytics.gg/poe-2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold?style=flat-square)](LICENSE)
 
-**Atlas Vault** is a lightweight, dark-themed browser extension for **Microsoft Edge**, **Google Chrome**, and other Chromium browsers. Designed specifically for *Path of Exile 2* players on [Mobalytics](https://mobalytics.gg/poe-2), it allows you to bookmark and categorize builds into custom folders, navigate complex build guides with a floating Table of Contents, and access your vault anywhere with an on-page sidebar.
+**Atlas Vault** is a lightweight, dark-themed browser extension for **Microsoft Edge**, **Google Chrome**, and other Chromium browsers. Designed specifically for *Path of Exile 2* players on [Mobalytics](https://mobalytics.gg/poe-2), it lets you bookmark and categorize builds into custom folders, jump around long build guides with a pinned Table of Contents, and keep your whole vault visible on the page itself.
 
 ---
 
 ## ✨ Features
 
-### 🌲 Hierarchical Tree View
-- Organize your saved builds into custom expandable folders (e.g., *League Starters*, *Endgame Bossers*, *Act Leveling*).
-- Uncategorized builds are neatly grouped at the bottom.
-- Inline folder creation, deletion, and quick renaming (✏️).
-- Move builds between folders in two clicks.
+### 🌲 Your vault, organized
+- Save builds into custom folders (*League Starters*, *Endgame Bossers*, *Act Leveling*…) plus an automatic **No folder** group at the bottom.
+- Create, rename (✏️), and delete folders inline.
+- Rename any saved build to whatever you call it — not just the folder it's in.
+- **Drag & drop** builds to reorder them by hand, or drag one straight into a different folder.
+- Re-saving a build you already have updates it in place instead of piling up duplicates.
 
-### 📌 In-Page Persistent Sidebar
-- Always accessible on any Mobalytics PoE 2 page (`https://mobalytics.gg/poe-2/*`).
-- Sits unobtrusively on the right edge, below the site's top navigation bar so buttons remain fully clickable.
-- Includes a quick **⚗️ tab toggle** on the left edge to collapse or expand the panel anytime.
-- Real-time synchronization between the extension popup and the in-page sidebar via `chrome.storage`.
+### 📌 Sidebar that lives on the page
+- Appears on any Mobalytics PoE 2 page, docked to the right edge just below the site's navigation bar so nothing on Mobalytics gets covered.
+- **➖ Minimize** it down to a slim strip, or collapse it entirely to the ⚗️ tab and click to bring it back.
+- Drag the edge to make it wider or narrower — double-click the handle to reset.
+- Everything you do in the toolbar popup is reflected in the sidebar instantly, and vice versa.
 
-### 📑 Sticky Table of Contents (ToC)
-- When viewing any build guide, the page's Table of Contents is automatically detected, mirrored, and pinned inside the sidebar.
-- Smoothly jumps to any section (Overview, Gems, Passives, Equipment, Quest Rewards) without having to scroll back to find the native navigation list.
+### 📑 Pinned Table of Contents
+- On any build guide, the page's own Table of Contents is detected and mirrored inside the sidebar.
+- Click any section (*Overview*, *Gems*, *Passives*, *Equipment*, *Quest Rewards*…) to jump straight there instead of scrolling back to Mobalytics' navigation.
+- Drag the splitter to give the ToC more or less room; double-click to reset.
 
-### 🖱️ Single-Click Navigation
-- The entire build card is clickable — click anywhere on a card to open the build guide in a new browser tab.
-- Hover-reveal controls for moving (📁) or deleting (🗑️) builds without misclicking.
+### 🔀 Build Variants
+- If the guide has level variants (lvl 1–14, Endgame, and so on), they're listed in the sidebar as **🔀 Build Variants** so you can flip between stages without hunting for the tab on the page.
+- Collapsible, and independently resizable.
 
-### 🔍 Quick Search & Filter
-- Instantly filter through your saved builds by guide title or creator name.
+### 🔍 Search, sort, and zoom
+- Filter your vault instantly by guide title or creator.
+- Sort by **Manual**, **Newest**, **Oldest**, **A–Z**, or **Z–A**.
+- **A− / A＋** scales the whole interface up or down if the default size doesn't suit you; double-click the percentage to reset to 100%.
 
-### 🎨 PoE2 Aesthetic
-- Custom dark-slate and gold interface matching Path of Exile 2's dark fantasy theme.
+### 💾 Backup
+- **📤 Export** your builds, folders, and settings to a JSON file.
+- **📥 Import** it again — handy for moving to a new machine, or for keeping a spare copy.
+
+### 🎨 PoE2 aesthetic
+- Dark-slate and gold throughout, matching Path of Exile 2's dark fantasy styling.
 
 ---
 
@@ -43,83 +51,86 @@
 
 Works with any Chromium-based browser (**Microsoft Edge**, **Google Chrome**, **Brave**, **Opera**, **Vivaldi**).
 
-### Microsoft Edge
 1. Download or clone this repository to your computer.
-2. In Edge, navigate to `edge://extensions/`.
-3. Enable **Developer mode** using the toggle switch in the bottom-left sidebar.
-4. Click the **Load unpacked** button at the top of the page.
-5. Select the `mobalytics-build-manager` directory (the folder containing `manifest.json`).
-
-### Google Chrome & Chromium Browsers
-1. Download or clone this repository to your computer.
-2. In Chrome, navigate to `chrome://extensions/`.
-3. Enable **Developer mode** in the top-right corner.
+2. Open your browser's extensions page:
+   - **Edge** → `edge://extensions/`
+   - **Chrome** → `chrome://extensions/`
+3. Turn on **Developer mode** (bottom-left in Edge, top-right in Chrome).
 4. Click **Load unpacked**.
-5. Select the `mobalytics-build-manager` directory.
+5. Select **the repository folder itself** — the one containing `manifest.json`.
 
-*(Optional)* Click the puzzle piece icon in your browser toolbar and pin **Atlas Vault** for one-click access.
+*(Optional)* Click the puzzle piece icon in your toolbar and pin **Atlas Vault** for one-click access.
 
 ---
 
 ## 🎮 How to Use
 
-### 1. Saving a Build
+### Saving a build
 1. Open any PoE 2 build on [Mobalytics](https://mobalytics.gg/poe-2/builds).
-2. Click the **Atlas Vault** extension icon or use the **Save Build** button directly in the on-page sidebar.
-3. Choose a destination folder from the dropdown (or leave as *No folder*).
-4. Click **💾 Save Current Build**. The title, creator, and thumbnail will be captured automatically.
+2. Press **💾 Save Build** in the sidebar, or click the Atlas Vault toolbar icon and use **💾 Save Current Build**.
+3. Pick a folder from the dropdown (or leave it as *No folder*).
+4. The title, creator, and thumbnail are captured for you.
 
-### 2. Managing Folders
-- **Create**: Type a folder name into the "New folder..." input and click **＋** (or press `Enter`).
-- **Toggle**: Click any folder header to expand or collapse its contents.
-- **Rename**: Hover over a folder header and click the pencil icon (✏️) to edit the name inline.
-- **Move Builds**: Hover over any build card and click the folder icon (📁) to move it to a different category.
+### Organizing your vault
+| I want to… | Do this |
+|---|---|
+| **Create a folder** | Type a name in the *"New folder…"* box and press **＋** or `Enter` |
+| **Expand / collapse a folder** | Click its header |
+| **Rename a folder** | Hover the header, click **✏️**, edit inline |
+| **Rename a build** | Hover the build, click **✏️**, edit inline |
+| **Move a build** | Drag it into another folder, or hover it and pick a folder from the 📁 menu |
+| **Reorder builds** | Drag them up or down (sort is set to **Manual**) |
+| **Delete** | Hover and click **🗑️** — deleting a folder keeps its builds, it just moves them to *No folder* |
 
-### 3. Using the Floating Table of Contents
-- On any build page, open the right-side **Atlas Vault** sidebar.
-- The **TABLE OF CONTENTS** section will appear at the top. Click any section link to immediately scroll directly to that guide section.
+### Using the Table of Contents
+Open the sidebar on any build guide and the **📋 Table of Contents** section appears at the top. Click any entry to jump to that part of the guide.
+
+### Backing up
+Hit **📤 Export** in either the popup or the sidebar to download a JSON backup, and **📥 Import** to restore one.
+
+### Getting the sidebar out of the way
+- **➖** in the header minimizes it to a slim strip.
+- Click the **⚗️** tab on the left edge to collapse it to nothing, and click it again to restore.
+- Drag the sidebar's edge to resize it; double-click the handle to reset to the default width.
 
 ---
 
-## 📁 Repository Structure
+## 🔒 Privacy
+
+Atlas Vault is Manifest V3 and runs entirely on your machine:
+
+- Your builds, folders, and settings are stored **only** in your browser's local extension storage (`chrome.storage.local`).
+- The extension only has access to **mobalytics.gg** — no other site.
+- **No analytics, no tracking, no telemetry.** Nothing is sent anywhere. Your data stays yours.
+
+---
+
+## 🛠️ Project Layout
+
+Everything the browser needs is in the repository root — there's no build step, and nothing to compile.
 
 ```text
-Atlas_Vault_for_PoE2/
-├── README.md
-└── mobalytics-build-manager/
-    ├── manifest.json         # Manifest V3 extension configuration
-    ├── background.js         # Service worker handling storage & CRUD operations
-    ├── icons/                # Extension icon assets (16x16, 48x48, 128x128)
-    │   ├── icon-16.png
-    │   ├── icon-48.png
-    │   └── icon-128.png
-    ├── content/              # In-page script and stylesheet
-    │   ├── content.js        # Sidebar injector, ToC parser & SPA navigation watcher
-    │   └── content.css       # Persistent sidebar and tree view styles
-    └── popup/                # Extension toolbar popup interface
-        ├── popup.html        # Popup markup (tree view layout)
-        ├── popup.js          # Controller for popup interactions & metadata scraping
-        └── popup.css         # Popup styling
+Atlas-Vault-for-PoE2/
+├── manifest.json     # Extension configuration
+├── background.js     # Service worker: storage & data operations
+├── content/          # In-page sidebar, ToC and variant parsing
+│   ├── content.js
+│   └── content.css
+├── popup/            # Toolbar popup
+│   ├── popup.html
+│   ├── popup.js
+│   └── popup.css
+└── icons/            # Extension icons (16, 48, 128)
 ```
----
-
-## 🔒 Permissions & Privacy
-
-Atlas Vault adheres strictly to **Manifest V3** security standards:
-- **`storage`**: Used solely to persist your folder structure and saved build URLs locally in your browser (`chrome.storage.local`).
-- **`tabs` & `scripting`**: Used only to read the title and metadata of the active Mobalytics build tab when you choose to save it.
-- **`host_permissions` (`https://mobalytics.gg/*`)**: Restricted strictly to Mobalytics. The extension has no access to any other websites.
-- **No Analytics / No Tracking**: Atlas Vault sends zero telemetry or analytics anywhere. Your data remains strictly local to your machine.
-
----
-
-## 🛠️ Technology Stack
-- **JavaScript (ES6+)** with modern async/await patterns
-- **Chrome Extensions API (Manifest V3)**
-- **CSS3 Variables & Flexbox**
-- **DOM MutationObserver** for SPA route transitions
 
 ---
 
 ## ⚖️ Disclaimer
-Atlas Vault is a third-party fan project vibe coded on antigravity and is not affiliated with, endorsed by, or associated with **Mobalytics** or **Grinding Gear Games**. All game assets and trademarks belong to their respective owners.
+
+Atlas Vault is a third-party fan project and is not affiliated with, endorsed by, or associated with **Mobalytics** or **Grinding Gear Games**. All game assets and trademarks belong to their respective owners.
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE).
