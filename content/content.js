@@ -672,6 +672,16 @@ let sidebar = null;
 let tocOpen = true;
 let searchQuery = '';
 let folderStates = {}; // { [folderId]: bool expanded }
+let tocRetry = null;   // MutationObserver for ToC retry
+let vRetry = null;     // MutationObserver for Variants retry
+let zoomDebounceTimer = null;
+
+function debouncedPersistZoom(newZoom) {
+  clearTimeout(zoomDebounceTimer);
+  zoomDebounceTimer = setTimeout(() => {
+    persistSettings({ uiZoom: newZoom });
+  }, 300);
+}
 
 function createSidebar() {
   if (document.getElementById('av-sidebar')) return;
@@ -877,17 +887,17 @@ function createSidebar() {
   toolbar.querySelector('#av-zoom-in').addEventListener('click', async () => {
     currentZoom = Math.min(ZOOM_MAX, Math.round((currentZoom + ZOOM_STEP) * 100) / 100);
     applyZoom();
-    await persistSettings({ uiZoom: currentZoom });
+    debouncedPersistZoom(currentZoom);
   });
   toolbar.querySelector('#av-zoom-out').addEventListener('click', async () => {
     currentZoom = Math.max(ZOOM_MIN, Math.round((currentZoom - ZOOM_STEP) * 100) / 100);
     applyZoom();
-    await persistSettings({ uiZoom: currentZoom });
+    debouncedPersistZoom(currentZoom);
   });
   toolbar.querySelector('#av-zoom-label').addEventListener('dblclick', async () => {
     currentZoom = 1;
     applyZoom();
-    await persistSettings({ uiZoom: 1 });
+    persistSettings({ uiZoom: 1 });
     showToast('Reset Zoom', 'UI size reset to 100%.');
   });
   applyZoom();
@@ -1658,19 +1668,21 @@ const navObserver = new MutationObserver(() => {
     resetVariants();
     // Wait for React to render then try ToC + Variants
     setTimeout(() => {
+      if (tocRetry) { tocRetry.disconnect(); tocRetry = null; }
+      if (vRetry) { vRetry.disconnect(); vRetry = null; }
       if (!tryInjectToC()) {
-        const retryObs = new MutationObserver(() => {
-          if (tryInjectToC()) retryObs.disconnect();
+        tocRetry = new MutationObserver(() => {
+          if (tryInjectToC()) tocRetry.disconnect();
         });
-        retryObs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => retryObs.disconnect(), 12000);
+        tocRetry.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => { if (tocRetry) { tocRetry.disconnect(); tocRetry = null; } }, 12000);
       }
       if (!tryInjectVariants()) {
-        const vRetry = new MutationObserver(() => {
+        vRetry = new MutationObserver(() => {
           if (tryInjectVariants()) vRetry.disconnect();
         });
         vRetry.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => vRetry.disconnect(), 12000);
+        setTimeout(() => { if (vRetry) { vRetry.disconnect(); vRetry = null; } }, 12000);
       }
     }, 600);
   } else {

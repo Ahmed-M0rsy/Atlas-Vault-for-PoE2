@@ -100,6 +100,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
   renderAll();
   bindEvents();
+  // Stay reactive to storage changes from content script / background sync
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.settings || changes.folders || changes.builds) loadData().then(renderAll);
+  });
 });
 
 async function loadData() {
