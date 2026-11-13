@@ -3,7 +3,7 @@ $root = $PSScriptRoot
 $out = Join-Path $root 'dist\firefox'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
-foreach ($item in 'background.js', 'icons', 'content', 'popup') {
+foreach ($item in 'icons', 'content', 'popup', 'shared') {
   Copy-Item (Join-Path $root $item) $out -Recurse
 }
 # manifest.json + Firefox overlay (overlay keys replace same-named top-level keys; "_" keys are ignored)

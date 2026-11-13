@@ -1,8 +1,5 @@
 {
-  "_comment": "Firefox-only overlay. build-firefox.ps1 merges these keys over manifest.json (and removes background.service_worker).",
-  "background": {
-    "scripts": ["background.js"]
-  },
+  "_comment": "Firefox-only overlay. build-firefox.ps1 merges these keys over manifest.json.",
   "browser_specific_settings": {
     "gecko": {
       "id": "atlas-vault-poe2@m0rsy.dev",

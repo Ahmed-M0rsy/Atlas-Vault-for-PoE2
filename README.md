@@ -63,7 +63,7 @@ Chromium: works with any Chromium-based browser (**Microsoft Edge**, **Google Ch
 
 ### 🦊 Firefox (140+)
 
-Firefox uses a different background-script manifest, so build the Firefox copy first:
+Firefox needs a few extra manifest keys (add-on ID, data-collection declaration), so build the Firefox copy first:
 
 ```powershell
 ./build-firefox.ps1
@@ -119,12 +119,15 @@ Atlas Vault is Manifest V3 and runs entirely on your machine:
 
 ## 🛠️ Project Layout
 
-Everything the browser needs is in the repository root — there's no build step, and nothing to compile.
+Chrome/Edge load the repository root directly — there's no build step. (Firefox uses `build-firefox.ps1`, see above.)
 
 ```text
 Atlas-Vault-for-PoE2/
-├── manifest.json     # Extension configuration
-├── background.js     # Service worker: storage & data operations
+├── manifest.json         # Extension configuration (Chrome/Edge)
+├── manifest.firefox.json # Firefox-only overlay merged by build-firefox.ps1
+├── build-firefox.ps1     # Builds dist/firefox + zip
+├── shared/
+│   └── common.js     # Storage layer, sorting, import/export (used by sidebar and popup)
 ├── content/          # In-page sidebar, ToC and variant parsing
 │   ├── content.js
 │   └── content.css

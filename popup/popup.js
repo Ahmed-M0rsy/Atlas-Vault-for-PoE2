@@ -7,8 +7,8 @@ let folderExpanded = {}; // { [folderId]: bool }
 let searchQuery = '';
 let movingBuildId = null;
 
-const ZOOM_MIN = 0.7, ZOOM_MAX = 1.6, ZOOM_STEP = 0.1;
-const SORT_MODES = ['manual', 'newest', 'oldest', 'az', 'za'];
+// Shared helpers (see shared/common.js)
+const { showToast, isSafeHttpsUrl, MOBALYTICS_HOST_RE, SORT_MODES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } = AV;
 
 function currentSort() {
   const s = state.settings?.buildSort;
@@ -35,62 +35,25 @@ function applyZoom() {
 async function persistSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   applyZoom();
-  await chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', settings: patch });
+  await AV.store.saveSettings(patch);
 }
 
 function sortBuilds(list) {
-  const mode = currentSort();
-  const arr = [...list];
-  if (mode === 'az') return arr.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-  if (mode === 'za') return arr.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
-  if (mode === 'oldest') return arr.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
-  if (mode === 'manual') {
-    const hasOrder = arr.some(b => typeof b.order === 'number');
-    if (!hasOrder) return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-    return arr.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
-  }
-  return arr.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)); // newest
+  return AV.sortBuilds(list, currentSort());
 }
 
-// Persist the currently displayed order as manual order
-async function persistManualOrder(orderedBuilds) {
-  const orderedIds = orderedBuilds.map(b => b.id);
-  // Assign local order immediately so re-render is stable
-  orderedBuilds.forEach((b, i) => {
-    const target = state.builds.find(x => x.id === b.id);
-    if (target) target.order = i;
-  });
-  await chrome.runtime.sendMessage({ type: 'REORDER_BUILDS', orderedIds });
+// After any manual reorder the UI switches to Manual sort.
+async function switchToManual() {
+  if (currentSort() === 'manual') return;
+  await persistSettings({ buildSort: 'manual' });
+  const sel = document.getElementById('av-sort');
+  if (sel) sel.value = 'manual';
 }
 
 async function moveBuild(buildId, dir) {
-  // Reorder within its own group (folder or uncategorized), then persist global order
-  const build = state.builds.find(b => b.id === buildId);
-  if (!build) return;
-  // Seed manual order from the current display order on first use
-  if (currentSort() !== 'manual' || !state.builds.some(b => typeof b.order === 'number')) {
-    sortBuilds(state.builds).forEach((b, i) => {
-      const t = state.builds.find(x => x.id === b.id);
-      if (t) t.order = i;
-    });
-  }
-  const group = state.builds.filter(b => (b.folderId || null) === (build.folderId || null));
-  const sorted = sortBuilds(group);
-  // In case we just seeded, force manual ordering for the swap calculation
-  sorted.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const idx = sorted.findIndex(b => b.id === buildId);
-  const swapIdx = idx + dir;
-  if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return;
-  const tmp = sorted[idx].order;
-  sorted[idx].order = sorted[swapIdx].order;
-  sorted[swapIdx].order = tmp;
-  if (currentSort() !== 'manual') {
-    await persistSettings({ buildSort: 'manual' });
-    const sel = document.getElementById('av-sort');
-    if (sel) sel.value = 'manual';
-  }
-  const allOrdered = [...state.builds].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  await persistManualOrder(allOrdered);
+  const mode = currentSort();
+  await AV.store.moveBuildOrder(buildId, dir, mode);
+  if (mode !== 'manual') await switchToManual();
   await loadData();
   renderAll();
 }
@@ -107,12 +70,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadData() {
-  const resp = await chrome.runtime.sendMessage({ type: 'GET_DATA' });
-  if (resp?.ok) {
-    state.folders = resp.data.folders || [];
-    state.builds  = resp.data.builds  || [];
-    state.settings = resp.data.settings || {};
-  }
+  const data = await AV.store.getAll();
+  state.folders = data.folders;
+  state.builds = data.builds;
+  state.settings = data.settings;
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -165,7 +126,7 @@ function bindEvents() {
   document.getElementById('av-modal-confirm').addEventListener('click', async () => {
     if (!movingBuildId) return;
     const folderId = document.getElementById('av-modal-folder').value || null;
-    await chrome.runtime.sendMessage({ type: 'MOVE_BUILD', buildId: movingBuildId, folderId });
+    await AV.store.moveBuildToFolder(movingBuildId, folderId);
     closeModal();
     await loadData();
     renderAll();
@@ -189,7 +150,7 @@ async function handleSave() {
     return;
   }
   if (folderId) meta.folderId = folderId;
-  await chrome.runtime.sendMessage({ type: 'SAVE_BUILD', build: meta });
+  await AV.store.saveBuild(meta);
   await loadData();
   renderAll();
 }
@@ -198,7 +159,7 @@ async function handleCreateFolder() {
   const input = document.getElementById('av-new-folder-input');
   const name = input.value.trim();
   if (!name) return;
-  await chrome.runtime.sendMessage({ type: 'CREATE_FOLDER', name });
+  await AV.store.createFolder(name);
   input.value = '';
   await loadData();
   renderAll();
@@ -322,7 +283,7 @@ function renderTree() {
     delBtn.addEventListener('click', async e => {
       e.stopPropagation();
       if (!confirm(`Delete folder "${folder.name}"?\nBuilds inside will become uncategorized.`)) return;
-      await chrome.runtime.sendMessage({ type: 'DELETE_FOLDER', id: folder.id });
+      await AV.store.deleteFolder(folder.id);
       await loadData();
       renderAll();
     });
@@ -462,7 +423,7 @@ function createBuildCard(build) {
   delBtn.addEventListener('click', async e => {
     e.stopPropagation();
     if (!confirm(`Delete "${build.title}"?`)) return;
-    await chrome.runtime.sendMessage({ type: 'DELETE_BUILD', id: build.id });
+    await AV.store.deleteBuild(build.id);
     await loadData();
     renderAll();
   });
@@ -540,65 +501,9 @@ function enableDropZone(zoneEl, folderId) {
 }
 
 async function handleBuildDrop(sourceId, targetFolderId, beforeBuildId, insertAfter) {
-  const source = state.builds.find(b => b.id === sourceId);
-  if (!source) return;
-  const targetFid = targetFolderId || null;
-  const groupAll = state.builds.filter(b => (b.folderId || null) === targetFid && b.id !== sourceId);
-  const sortedGroup = sortBuilds(groupAll);
-  sortedGroup.forEach((b, i) => {
-    const t = state.builds.find(x => x.id === b.id);
-    if (t && typeof t.order !== 'number') t.order = i;
-  });
-  const ordered = [...sortedGroup].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  let newOrder;
-  if (!beforeBuildId) {
-    newOrder = ordered.length ? (ordered[ordered.length - 1].order ?? ordered.length - 1) + 1 : 0;
-  } else {
-    const idx = ordered.findIndex(b => b.id === beforeBuildId);
-    if (idx < 0) newOrder = ordered.length ? (ordered[ordered.length - 1].order ?? 0) + 1 : 0;
-    else if (!insertAfter) {
-      newOrder = idx === 0 ? (ordered[0].order ?? 1) - 1 : ((ordered[idx - 1].order ?? 0) + (ordered[idx].order ?? 0)) / 2;
-    } else {
-      newOrder = idx === ordered.length - 1 ? (ordered[idx].order ?? 0) + 1 : ((ordered[idx].order ?? 0) + (ordered[idx + 1].order ?? 0)) / 2;
-    }
-  }
-
-  // Final local state: move source, renormalize target group to clean integers.
-  const tmpBuilds = state.builds.map(b => b.id === sourceId ? { ...b, folderId: targetFid, order: newOrder } : { ...b });
-  tmpBuilds
-    .filter(b => (b.folderId || null) === targetFid)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .forEach((b, i) => {
-      const t = tmpBuilds.find(x => x.id === b.id);
-      if (t) t.order = i * 2; // spaced integers keep future inserts stable
-    });
-
-  // Global orderedIds: per-group display sequences concatenated (display only
-  // compares order within a group, so cross-group interleave is irrelevant).
-  const folderIds = new Set(state.folders.map(f => f.id));
-  const orderedIds = [];
-  state.folders.forEach(f => {
-    tmpBuilds
-      .filter(b => b.folderId === f.id)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .forEach(b => orderedIds.push(b.id));
-  });
-  tmpBuilds
-    .filter(b => !b.folderId || !folderIds.has(b.folderId))
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .forEach(b => { if (!orderedIds.includes(b.id)) orderedIds.push(b.id); });
-  tmpBuilds.forEach(b => { if (!orderedIds.includes(b.id)) orderedIds.push(b.id); });
-
-  const folders = {};
-  tmpBuilds.forEach(b => { folders[b.id] = b.folderId || null; });
-
-  if (currentSort() !== 'manual') {
-    await persistSettings({ buildSort: 'manual' });
-    const sel = document.getElementById('av-sort');
-    if (sel) sel.value = 'manual';
-  }
-  await chrome.runtime.sendMessage({ type: 'REORDER_BUILDS', orderedIds, folders });
+  const mode = currentSort();
+  await AV.store.dropBuild(sourceId, targetFolderId, beforeBuildId, insertAfter, mode);
+  if (mode !== 'manual') await switchToManual();
   await loadData();
   renderAll();
 }
@@ -625,7 +530,7 @@ function startBuildRename(build, card) {
     done = true;
     const name = input.value.trim();
     if (save && name && name !== build.title) {
-      await chrome.runtime.sendMessage({ type: 'RENAME_BUILD', id: build.id, title: name });
+      await AV.store.renameBuild(build.id, name);
       await loadData();
       renderAll();
     } else {
@@ -657,7 +562,7 @@ function startInlineRename(folder, nameEl, renameBtn) {
   const commit = async () => {
     const name = input.value.trim();
     if (name && name !== folder.name) {
-      await chrome.runtime.sendMessage({ type: 'RENAME_FOLDER', id: folder.id, name });
+      await AV.store.renameFolder(folder.id, name);
     }
     await loadData();
     renderAll();
@@ -684,284 +589,16 @@ function closeModal() {
   document.getElementById('av-modal').classList.add('av-hidden');
 }
 
-// ── Toast ────────────────────────────────────────────────────────────────────
-function showToast(title, body = '') {
-  let el = document.getElementById('av-toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'av-toast';
-    document.body.appendChild(el);
-  }
-  const strong = document.createElement('strong');
-  strong.textContent = title == null ? '' : String(title);
-  el.replaceChildren(strong);
-  if (body) el.append(document.createTextNode(String(body)));
-  el.classList.add('av-show');
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove('av-show'), 3000);
-}
-
-// ── Export / Import helpers ──────────────────────────────────────────────────
+// ── Export / Import (shared UI in shared/common.js) ──────────────────────────
 async function exportData() {
-  const resp = await chrome.runtime.sendMessage({ type: 'GET_DATA' });
-  const folders = resp?.data?.folders || state.folders || [];
-  const builds = resp?.data?.builds || state.builds || [];
-  const settings = resp?.data?.settings || state.settings || {};
-
-  const backup = {
-    app: 'Atlas Vault',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    folders,
-    builds,
-    settings
-  };
-
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0, 10);
-  a.href = url;
-  a.download = `atlas-vault-backup-${dateStr}.json`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 200);
-
-  showToast('📤 Export Complete', `Exported ${folders.length} folder(s) and ${builds.length} build(s).`);
+  const { folders, builds, settings } = await AV.store.getAll();
+  AV.exportBackup(folders, builds, settings);
 }
 
 function triggerImport() {
-  let input = document.getElementById('av-import-file-input');
-  if (!input) {
-    input = document.createElement('input');
-    input.type = 'file';
-    input.id = 'av-import-file-input';
-    input.accept = '.json,application/json';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-  }
-
-  input.value = '';
-  input.onchange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        const normalized = normalizeImportData(parsed);
-        if (normalized.builds.length === 0 && normalized.folders.length === 0) {
-          showToast('❌ Import Error', 'No valid builds or folders found.');
-          return;
-        }
-        showImportModal(normalized);
-      } catch (err) {
-        showToast('❌ Import Error', 'Invalid JSON backup file.');
-      }
-    };
-    reader.onerror = () => {
-      showToast('❌ Import Error', 'Could not read file.');
-    };
-    reader.readAsText(file);
-  };
-
-  input.click();
-}
-
-function normalizeImportData(raw) {
-  let folders = [];
-  let builds = [];
-  let settings = null;
-  let exportedAt = null;
-
-  if (Array.isArray(raw)) {
-    builds = raw;
-  } else if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.folders)) folders = raw.folders;
-    if (Array.isArray(raw.builds)) builds = raw.builds;
-    if (raw.settings && typeof raw.settings === 'object') settings = raw.settings;
-    if (raw.exportedAt) exportedAt = raw.exportedAt;
-  }
-
-  // Folders first, so build.folderId can follow any ID that had to be regenerated.
-  const folderIdFix = new Map();
-  folders = folders.filter(f => f && f.name).map(f => {
-    const id = cleanId(f.id);
-    if (f.id != null) folderIdFix.set(String(f.id), id);
-    return {
-      id,
-      name: cleanStr(f.name, 40).trim(),
-      createdAt: typeof f.createdAt === 'number' ? f.createdAt : Date.now()
-    };
-  }).filter(f => f.name);
-
-  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
-    id: cleanId(b.id),
-    title: cleanStr(b.title, 120) || 'Untitled Build',
-    author: cleanStr(b.author, 120),
-    buildClass: cleanStr(b.buildClass, 120),
-    url: isSafeHttpsUrl(b.url, MOBALYTICS_HOST_RE) ? String(b.url) : '',
-    thumbnail: isSafeHttpsUrl(b.thumbnail) ? String(b.thumbnail) : '',
-    folderId: b.folderId ? (folderIdFix.get(String(b.folderId)) || null) : null,
-    savedAt: typeof b.savedAt === 'number' ? b.savedAt : Date.now(),
-    ...(typeof b.order === 'number' ? { order: b.order } : {})
-  }));
-
-  return { folders, builds, settings, exportedAt };
-}
-
-function showImportModal(importedData) {
-  let modal = document.getElementById('av-import-modal');
-  if (modal) modal.remove();
-
-  modal = document.createElement('div');
-  modal.id = 'av-import-modal';
-  modal.className = 'av-modal-backdrop';
-
-  const dateFormatted = importedData.exportedAt
-    ? new Date(importedData.exportedAt).toLocaleDateString() + ' ' + new Date(importedData.exportedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '';
-
-  modal.innerHTML = `
-    <div class="av-modal-card">
-      <div class="av-modal-header">
-        <span class="av-modal-title">📥 Import Atlas Vault Data</span>
-        <button class="av-modal-close" title="Close">✕</button>
-      </div>
-      <div class="av-modal-body">
-        <p class="av-modal-desc">Backup contents detected:</p>
-        <div class="av-import-stats">
-          <div class="av-import-stat"><strong data-stat="folders"></strong><span>Folders</span></div>
-          <div class="av-import-stat"><strong data-stat="builds"></strong><span>Builds</span></div>
-          <div class="av-import-stat"><strong data-stat="settings"></strong><span>Settings</span></div>
-        </div>
-        <div class="av-import-meta" style="display:none"></div>
-        <div class="av-import-help">
-          <b>Merge Data:</b> Keep existing builds and add incoming items without duplicates.<br/>
-          <b>Replace All:</b> Overwrite existing builds and settings completely.
-        </div>
-      </div>
-      <div class="av-modal-actions">
-        <button id="av-btn-import-cancel" class="av-btn-secondary">Cancel</button>
-        <button id="av-btn-import-replace" class="av-btn-danger" title="Overwrite current data">Replace All</button>
-        <button id="av-btn-import-merge" class="av-btn-primary" title="Keep existing and add incoming">Merge Data</button>
-      </div>
-    </div>
-  `;
-
-  modal.querySelector('[data-stat="folders"]').textContent = String(importedData.folders.length);
-  modal.querySelector('[data-stat="builds"]').textContent = String(importedData.builds.length);
-  modal.querySelector('[data-stat="settings"]').textContent = importedData.settings ? 'Yes' : 'No';
-  if (dateFormatted) {
-    const meta = modal.querySelector('.av-import-meta');
-    meta.textContent = `📅 Exported: ${dateFormatted}`;
-    meta.style.display = '';
-  }
-
-  document.body.appendChild(modal);
-
-  const close = () => modal.remove();
-  modal.querySelector('.av-modal-close').addEventListener('click', close);
-  modal.querySelector('#av-btn-import-cancel').addEventListener('click', close);
-  modal.addEventListener('click', e => { if (e.target === modal) close(); });
-
-  modal.querySelector('#av-btn-import-merge').addEventListener('click', async () => {
-    close();
-    await executeMerge(importedData);
+  AV.startImport(async (mode, data) => {
+    await AV.store.applyImport(mode, data);
     await loadData();
     renderAll();
-    showToast('✅ Import Complete', `Merged ${importedData.builds.length} build(s) & ${importedData.folders.length} folder(s).`);
   });
-
-  modal.querySelector('#av-btn-import-replace').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to replace ALL current builds and folders with this backup? This cannot be undone.')) return;
-    close();
-    await executeReplace(importedData);
-    await loadData();
-    renderAll();
-    showToast('✅ Import Complete', `Restored ${importedData.builds.length} build(s) & ${importedData.folders.length} folder(s).`);
-  });
-}
-
-async function executeMerge(imported) {
-  const resp = await chrome.runtime.sendMessage({ type: 'GET_DATA' });
-  const curFolders = resp?.data?.folders || state.folders || [];
-  const curBuilds = resp?.data?.builds || state.builds || [];
-  const curSettings = resp?.data?.settings || state.settings || {};
-
-  const folderIdMap = new Map();
-  const finalFolders = [...curFolders];
-
-  imported.folders.forEach(impFolder => {
-    const existing = finalFolders.find(f => f.name.toLowerCase() === impFolder.name.toLowerCase());
-    if (existing) {
-      folderIdMap.set(impFolder.id, existing.id);
-    } else {
-      const newFolder = { ...impFolder, id: impFolder.id || crypto.randomUUID() };
-      finalFolders.push(newFolder);
-      folderIdMap.set(impFolder.id, newFolder.id);
-    }
-  });
-
-  const finalBuilds = [...curBuilds];
-  imported.builds.forEach(impBuild => {
-    const targetFolderId = impBuild.folderId ? (folderIdMap.get(impBuild.folderId) || impBuild.folderId) : null;
-    const validFolderId = finalFolders.some(f => f.id === targetFolderId) ? targetFolderId : null;
-
-    const existingIdx = finalBuilds.findIndex(b => (impBuild.url && b.url === impBuild.url) || b.id === impBuild.id);
-    if (existingIdx >= 0) {
-      finalBuilds[existingIdx] = {
-        ...finalBuilds[existingIdx],
-        ...impBuild,
-        folderId: validFolderId !== undefined ? validFolderId : finalBuilds[existingIdx].folderId
-      };
-    } else {
-      finalBuilds.push({
-        ...impBuild,
-        id: impBuild.id || crypto.randomUUID(),
-        folderId: validFolderId
-      });
-    }
-  });
-
-  const finalSettings = { ...curSettings, ...(imported.settings || {}) };
-
-  await chrome.runtime.sendMessage({
-    type: 'IMPORT_DATA',
-    folders: finalFolders,
-    builds: finalBuilds,
-    settings: finalSettings
-  });
-}
-
-async function executeReplace(imported) {
-  const finalSettings = imported.settings || {};
-  await chrome.runtime.sendMessage({
-    type: 'IMPORT_DATA',
-    folders: imported.folders,
-    builds: imported.builds,
-    settings: finalSettings
-  });
-}
-
-// ── Utility ───────────────────────────────────────────────────────────────────
-// Only allow https URLs (used for build links and thumbnails, which can come from imported files).
-function isSafeHttpsUrl(u, hostRe) {
-  try {
-    const p = new URL(String(u));
-    return p.protocol === 'https:' && (!hostRe || hostRe.test(p.hostname));
-  } catch (e) { return false; }
-}
-const MOBALYTICS_HOST_RE = /^(www\.)?mobalytics\.gg$/;
-
-function cleanStr(v, max) {
-  return v == null ? '' : String(v).slice(0, max);
-}
-function cleanId(v) {
-  const s = String(v == null ? '' : v);
-  return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : crypto.randomUUID();
 }
