@@ -1,11 +1,11 @@
 # ⚗️ Atlas Vault – PoE2 Build Manager
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-orange?style=flat-square)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Compatibility](https://img.shields.io/badge/Browser-Chrome%20%7C%20Edge%20%7C%20Brave-blue?style=flat-square)](#-installation)
+[![Compatibility](https://img.shields.io/badge/Browser-Chrome%20%7C%20Edge%20%7C%20Brave%20%7C%20Firefox-blue?style=flat-square)](#-installation)
 [![Target](https://img.shields.io/badge/Platform-Mobalytics%20PoE2-blueviolet?style=flat-square)](https://mobalytics.gg/poe-2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold?style=flat-square)](LICENSE)
 
-**Atlas Vault** is a lightweight, dark-themed browser extension for **Microsoft Edge**, **Google Chrome**, and other Chromium browsers. Designed specifically for *Path of Exile 2* players on [Mobalytics](https://mobalytics.gg/poe-2), it lets you bookmark and categorize builds into custom folders, jump around long build guides with a pinned Table of Contents, and keep your whole vault visible on the page itself.
+**Atlas Vault** is a lightweight, dark-themed browser extension for **Microsoft Edge**, **Google Chrome**, **Firefox**, and other Chromium browsers. Designed specifically for *Path of Exile 2* players on [Mobalytics](https://mobalytics.gg/poe-2), it lets you bookmark and categorize builds into custom folders, jump around long build guides with a pinned Table of Contents, and keep your whole vault visible on the page itself.
 
 ---
 
@@ -49,7 +49,7 @@
 
 ## 🚀 Installation
 
-Works with any Chromium-based browser (**Microsoft Edge**, **Google Chrome**, **Brave**, **Opera**, **Vivaldi**).
+Chromium: works with any Chromium-based browser (**Microsoft Edge**, **Google Chrome**, **Brave**, **Opera**, **Vivaldi**).
 
 1. Download or clone this repository to your computer.
 2. Open your browser's extensions page:
@@ -61,7 +61,7 @@ Works with any Chromium-based browser (**Microsoft Edge**, **Google Chrome**, **
 
 *(Optional)* Click the puzzle piece icon in your toolbar and pin **Atlas Vault** for one-click access.
 
-### 🦊 Firefox (128+)
+### 🦊 Firefox (140+)
 
 Firefox uses a different background-script manifest, so build the Firefox copy first:
 
@@ -97,6 +97,8 @@ Open the sidebar on any build guide and the **📋 Table of Contents** section a
 
 ### Backing up
 Hit **📤 Export** in either the popup or the sidebar to download a JSON backup, and **📥 Import** to restore one.
+
+Imported files are validated: text fields are length-limited, and build links must be `https://mobalytics.gg/` URLs (thumbnails must be `https`); anything else is dropped.
 
 ### Getting the sidebar out of the way
 - **➖** in the header minimizes it to a slim strip.
