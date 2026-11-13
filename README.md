@@ -61,6 +61,16 @@ Works with any Chromium-based browser (**Microsoft Edge**, **Google Chrome**, **
 
 *(Optional)* Click the puzzle piece icon in your toolbar and pin **Atlas Vault** for one-click access.
 
+### 🦊 Firefox (128+)
+
+Firefox uses a different background-script manifest, so build the Firefox copy first:
+
+```powershell
+./build-firefox.ps1
+```
+
+Then open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → pick `dist/firefox/manifest.json`. (Temporary add-ons are removed when Firefox restarts; for permanent installs, sign `dist/atlas-vault-firefox.zip` via [addons.mozilla.org](https://addons.mozilla.org/developers/). Change the `gecko.id` in `manifest.firefox.json` to your own first.) If the sidebar doesn't appear on Mobalytics, grant the site access under `about:addons` → Atlas Vault → Permissions.
+
 ---
 
 ## 🎮 How to Use

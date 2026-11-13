@@ -222,7 +222,7 @@ function populateFolderSelects() {
     if (!sel) return;
     const isModal = sel.id === 'av-modal-folder';
     const prev = sel.value;
-    sel.innerHTML = `<option value="">${isModal ? '— No folder —' : 'No folder'}</option>`;
+    sel.replaceChildren(new Option(isModal ? '— No folder —' : 'No folder', ''));
     state.folders.forEach(f => {
       const o = document.createElement('option');
       o.value = f.id; o.textContent = f.name;
@@ -395,8 +395,12 @@ function createBuildCard(build) {
   // Thumbnail
   const thumb = document.createElement('div');
   thumb.className = 'av-build-thumb';
-  if (build.thumbnail) {
-    thumb.innerHTML = `<img src="${escHtml(build.thumbnail)}" alt="" loading="lazy" />`;
+  if (isSafeHttpsUrl(build.thumbnail)) {
+    const img = document.createElement('img');
+    img.src = build.thumbnail;
+    img.alt = '';
+    img.loading = 'lazy';
+    thumb.appendChild(img);
   } else {
     thumb.textContent = '⚗️';
   }
@@ -405,10 +409,16 @@ function createBuildCard(build) {
   const info = document.createElement('div');
   info.className = 'av-build-info';
   const metaParts = [build.buildClass, build.author].filter(Boolean);
-  info.innerHTML = `
-    <div class="av-build-title">${escHtml(build.title)}</div>
-    ${metaParts.length ? `<div class="av-build-meta">${metaParts.map(escHtml).join(' · ')}</div>` : ''}
-  `;
+  const titleDiv = document.createElement('div');
+  titleDiv.className = 'av-build-title';
+  titleDiv.textContent = build.title || '';
+  info.appendChild(titleDiv);
+  if (metaParts.length) {
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'av-build-meta';
+    metaDiv.textContent = metaParts.join(' · ');
+    info.appendChild(metaDiv);
+  }
 
   // Actions (hover-reveal)
   const actions = document.createElement('div');
@@ -507,7 +517,7 @@ function createBuildCard(build) {
   card.addEventListener('click', e => {
     if (e.target.closest('.av-build-actions')) return;
     if (e.target.closest('.av-build-rename-input')) return;
-    chrome.tabs.create({ url: build.url });
+    if (isSafeHttpsUrl(build.url, MOBALYTICS_HOST_RE)) chrome.tabs.create({ url: build.url });
   });
 
   return card;
@@ -687,7 +697,10 @@ function showToast(title, body = '') {
     el.id = 'av-toast';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<strong>${escHtml(title)}</strong>${body ? escHtml(body) : ''}`;
+  const strong = document.createElement('strong');
+  strong.textContent = title == null ? '' : String(title);
+  el.replaceChildren(strong);
+  if (body) el.append(document.createTextNode(String(body)));
   el.classList.add('av-show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('av-show'), 3000);
@@ -779,22 +792,28 @@ function normalizeImportData(raw) {
     if (raw.exportedAt) exportedAt = raw.exportedAt;
   }
 
-  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
-    id: b.id || crypto.randomUUID(),
-    title: b.title || 'Untitled Build',
-    author: b.author || '',
-    buildClass: b.buildClass || '',
-    url: b.url || '',
-    thumbnail: b.thumbnail || '',
-    folderId: b.folderId || null,
-    savedAt: b.savedAt || Date.now(),
-    ...(typeof b.order === 'number' ? { order: b.order } : {})
-  }));
+  // Folders first, so build.folderId can follow any ID that had to be regenerated.
+  const folderIdFix = new Map();
+  folders = folders.filter(f => f && f.name).map(f => {
+    const id = cleanId(f.id);
+    if (f.id != null) folderIdFix.set(String(f.id), id);
+    return {
+      id,
+      name: cleanStr(f.name, 40).trim(),
+      createdAt: typeof f.createdAt === 'number' ? f.createdAt : Date.now()
+    };
+  }).filter(f => f.name);
 
-  folders = folders.filter(f => f && f.name).map(f => ({
-    id: f.id || crypto.randomUUID(),
-    name: String(f.name).trim(),
-    createdAt: f.createdAt || Date.now()
+  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
+    id: cleanId(b.id),
+    title: cleanStr(b.title, 120) || 'Untitled Build',
+    author: cleanStr(b.author, 120),
+    buildClass: cleanStr(b.buildClass, 120),
+    url: isSafeHttpsUrl(b.url, MOBALYTICS_HOST_RE) ? String(b.url) : '',
+    thumbnail: isSafeHttpsUrl(b.thumbnail) ? String(b.thumbnail) : '',
+    folderId: b.folderId ? (folderIdFix.get(String(b.folderId)) || null) : null,
+    savedAt: typeof b.savedAt === 'number' ? b.savedAt : Date.now(),
+    ...(typeof b.order === 'number' ? { order: b.order } : {})
   }));
 
   return { folders, builds, settings, exportedAt };
@@ -821,11 +840,11 @@ function showImportModal(importedData) {
       <div class="av-modal-body">
         <p class="av-modal-desc">Backup contents detected:</p>
         <div class="av-import-stats">
-          <div class="av-import-stat"><strong>${importedData.folders.length}</strong><span>Folders</span></div>
-          <div class="av-import-stat"><strong>${importedData.builds.length}</strong><span>Builds</span></div>
-          <div class="av-import-stat"><strong>${importedData.settings ? 'Yes' : 'No'}</strong><span>Settings</span></div>
+          <div class="av-import-stat"><strong data-stat="folders"></strong><span>Folders</span></div>
+          <div class="av-import-stat"><strong data-stat="builds"></strong><span>Builds</span></div>
+          <div class="av-import-stat"><strong data-stat="settings"></strong><span>Settings</span></div>
         </div>
-        ${dateFormatted ? `<div class="av-import-meta">📅 Exported: ${escHtml(dateFormatted)}</div>` : ''}
+        <div class="av-import-meta" style="display:none"></div>
         <div class="av-import-help">
           <b>Merge Data:</b> Keep existing builds and add incoming items without duplicates.<br/>
           <b>Replace All:</b> Overwrite existing builds and settings completely.
@@ -838,6 +857,15 @@ function showImportModal(importedData) {
       </div>
     </div>
   `;
+
+  modal.querySelector('[data-stat="folders"]').textContent = String(importedData.folders.length);
+  modal.querySelector('[data-stat="builds"]').textContent = String(importedData.builds.length);
+  modal.querySelector('[data-stat="settings"]').textContent = importedData.settings ? 'Yes' : 'No';
+  if (dateFormatted) {
+    const meta = modal.querySelector('.av-import-meta');
+    meta.textContent = `📅 Exported: ${dateFormatted}`;
+    meta.style.display = '';
+  }
 
   document.body.appendChild(modal);
 
@@ -926,9 +954,19 @@ async function executeReplace(imported) {
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  if (!s) return '';
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Only allow https URLs (used for build links and thumbnails, which can come from imported files).
+function isSafeHttpsUrl(u, hostRe) {
+  try {
+    const p = new URL(String(u));
+    return p.protocol === 'https:' && (!hostRe || hostRe.test(p.hostname));
+  } catch (e) { return false; }
+}
+const MOBALYTICS_HOST_RE = /^(www\.)?mobalytics\.gg$/;
+
+function cleanStr(v, max) {
+  return v == null ? '' : String(v).slice(0, max);
+}
+function cleanId(v) {
+  const s = String(v == null ? '' : v);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : crypto.randomUUID();
 }

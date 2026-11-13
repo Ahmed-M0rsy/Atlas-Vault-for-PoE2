@@ -12,17 +12,30 @@ function showToast(title, body = '') {
     el.id = 'av-toast';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<strong>${escHtml(title)}</strong>${body ? escHtml(body) : ''}`;
+  const strong = document.createElement('strong');
+  strong.textContent = title == null ? '' : String(title);
+  el.replaceChildren(strong);
+  if (body) el.append(document.createTextNode(String(body)));
   el.classList.add('av-show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('av-show'), 3000);
 }
 
-function escHtml(s) {
-  if (!s) return '';
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Only allow https URLs (used for build links and thumbnails, which can come from imported files).
+function isSafeHttpsUrl(u, hostRe) {
+  try {
+    const p = new URL(String(u));
+    return p.protocol === 'https:' && (!hostRe || hostRe.test(p.hostname));
+  } catch (e) { return false; }
+}
+const MOBALYTICS_HOST_RE = /^(www\.)?mobalytics\.gg$/;
+
+function cleanStr(v, max) {
+  return v == null ? '' : String(v).slice(0, max);
+}
+function cleanId(v) {
+  const s = String(v == null ? '' : v);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : crypto.randomUUID();
 }
 
 // ── Settings & Layout State ──────────────────────────────────────────────────
@@ -343,22 +356,28 @@ function normalizeImportData(raw) {
     if (raw.exportedAt) exportedAt = raw.exportedAt;
   }
 
-  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
-    id: b.id || crypto.randomUUID(),
-    title: b.title || 'Untitled Build',
-    author: b.author || '',
-    buildClass: b.buildClass || '',
-    url: b.url || '',
-    thumbnail: b.thumbnail || '',
-    folderId: b.folderId || null,
-    savedAt: b.savedAt || Date.now(),
-    ...(typeof b.order === 'number' ? { order: b.order } : {})
-  }));
+  // Folders first, so build.folderId can follow any ID that had to be regenerated.
+  const folderIdFix = new Map();
+  folders = folders.filter(f => f && f.name).map(f => {
+    const id = cleanId(f.id);
+    if (f.id != null) folderIdFix.set(String(f.id), id);
+    return {
+      id,
+      name: cleanStr(f.name, 40).trim(),
+      createdAt: typeof f.createdAt === 'number' ? f.createdAt : Date.now()
+    };
+  }).filter(f => f.name);
 
-  folders = folders.filter(f => f && f.name).map(f => ({
-    id: f.id || crypto.randomUUID(),
-    name: String(f.name).trim(),
-    createdAt: f.createdAt || Date.now()
+  builds = builds.filter(b => b && (b.url || b.title)).map(b => ({
+    id: cleanId(b.id),
+    title: cleanStr(b.title, 120) || 'Untitled Build',
+    author: cleanStr(b.author, 120),
+    buildClass: cleanStr(b.buildClass, 120),
+    url: isSafeHttpsUrl(b.url, MOBALYTICS_HOST_RE) ? String(b.url) : '',
+    thumbnail: isSafeHttpsUrl(b.thumbnail) ? String(b.thumbnail) : '',
+    folderId: b.folderId ? (folderIdFix.get(String(b.folderId)) || null) : null,
+    savedAt: typeof b.savedAt === 'number' ? b.savedAt : Date.now(),
+    ...(typeof b.order === 'number' ? { order: b.order } : {})
   }));
 
   return { folders, builds, settings, exportedAt };
@@ -385,11 +404,11 @@ function showImportModal(importedData) {
       <div class="av-modal-body">
         <p class="av-modal-desc">Backup contents detected:</p>
         <div class="av-import-stats">
-          <div class="av-import-stat"><strong>${importedData.folders.length}</strong><span>Folders</span></div>
-          <div class="av-import-stat"><strong>${importedData.builds.length}</strong><span>Builds</span></div>
-          <div class="av-import-stat"><strong>${importedData.settings ? 'Yes' : 'No'}</strong><span>Settings</span></div>
+          <div class="av-import-stat"><strong data-stat="folders"></strong><span>Folders</span></div>
+          <div class="av-import-stat"><strong data-stat="builds"></strong><span>Builds</span></div>
+          <div class="av-import-stat"><strong data-stat="settings"></strong><span>Settings</span></div>
         </div>
-        ${dateFormatted ? `<div class="av-import-meta">📅 Exported: ${escHtml(dateFormatted)}</div>` : ''}
+        <div class="av-import-meta" style="display:none"></div>
         <div class="av-import-help">
           <b>Merge Data:</b> Keep existing builds and add incoming items without duplicates.<br/>
           <b>Replace All:</b> Overwrite existing builds and settings completely.
@@ -402,6 +421,15 @@ function showImportModal(importedData) {
       </div>
     </div>
   `;
+
+  modal.querySelector('[data-stat="folders"]').textContent = String(importedData.folders.length);
+  modal.querySelector('[data-stat="builds"]').textContent = String(importedData.builds.length);
+  modal.querySelector('[data-stat="settings"]').textContent = importedData.settings ? 'Yes' : 'No';
+  if (dateFormatted) {
+    const meta = modal.querySelector('.av-import-meta');
+    meta.textContent = `📅 Exported: ${dateFormatted}`;
+    meta.style.display = '';
+  }
 
   document.body.appendChild(modal);
 
@@ -806,8 +834,9 @@ function createSidebar() {
       <span id="av-variants-title">🔀 Build Variants</span>
       <span id="av-variants-count"></span>
     </div>
-    <div id="av-variants-list" class="av-open" style="max-height:${spec(currentVariantsHeight)}"></div>
+    <div id="av-variants-list" class="av-open"></div>
   `;
+  variantsSection.querySelector('#av-variants-list').style.maxHeight = spec(currentVariantsHeight);
   expandedWrap.appendChild(variantsSection);
 
   // Variants resizer splitter (drag up/down, double-click resets)
@@ -1053,14 +1082,21 @@ function renderTree(folders, builds) {
     // Folder header
     const fHeader = document.createElement('div');
     fHeader.className = 'av-folder-header';
-    fHeader.innerHTML = `
-      <span class="av-folder-arrow ${isOpen ? 'av-open' : ''}">▶</span>
-      <span class="av-folder-icon-em">📁</span>
-      <span class="av-folder-label" title="${escHtml(folder.name)}">${escHtml(folder.name)}</span>
-      <span class="av-folder-count">${folderBuilds.length}</span>
-      <button class="av-folder-rename-btn" title="Rename" data-id="${folder.id}">✏️</button>
-      <button class="av-folder-del-btn" title="Delete folder" data-id="${folder.id}">🗑️</button>
-    `;
+    const mk = (tag, cls, text, title) => {
+      const el = document.createElement(tag);
+      el.className = cls;
+      if (text != null) el.textContent = text;
+      if (title) el.title = title;
+      return el;
+    };
+    fHeader.append(
+      mk('span', `av-folder-arrow ${isOpen ? 'av-open' : ''}`, '▶'),
+      mk('span', 'av-folder-icon-em', '📁'),
+      mk('span', 'av-folder-label', folder.name, folder.name),
+      mk('span', 'av-folder-count', String(folderBuilds.length)),
+      mk('button', 'av-folder-rename-btn', '✏️', 'Rename'),
+      mk('button', 'av-folder-del-btn', '🗑️', 'Delete folder')
+    );
 
     // Children
     const children = document.createElement('div');
@@ -1163,8 +1199,12 @@ function createBuildItem(build, folders) {
   // Thumbnail
   const thumb = document.createElement('div');
   thumb.className = 'av-build-thumb-sm';
-  if (build.thumbnail) {
-    thumb.innerHTML = `<img src="${escHtml(build.thumbnail)}" alt="" loading="lazy" />`;
+  if (isSafeHttpsUrl(build.thumbnail)) {
+    const img = document.createElement('img');
+    img.src = build.thumbnail;
+    img.alt = '';
+    img.loading = 'lazy';
+    thumb.appendChild(img);
   } else {
     thumb.textContent = '⚗️';
   }
@@ -1173,10 +1213,16 @@ function createBuildItem(build, folders) {
   const info = document.createElement('div');
   info.className = 'av-build-item-info';
   const metaParts = [build.buildClass, build.author].filter(Boolean);
-  info.innerHTML = `
-    <div class="av-build-item-title">${escHtml(build.title)}</div>
-    ${metaParts.length ? `<div class="av-build-item-meta">${metaParts.map(escHtml).join(' · ')}</div>` : ''}
-  `;
+  const titleDiv = document.createElement('div');
+  titleDiv.className = 'av-build-item-title';
+  titleDiv.textContent = build.title || '';
+  info.appendChild(titleDiv);
+  if (metaParts.length) {
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'av-build-item-meta';
+    metaDiv.textContent = metaParts.join(' · ');
+    info.appendChild(metaDiv);
+  }
 
   // Actions
   const actions = document.createElement('div');
@@ -1280,7 +1326,7 @@ function createBuildItem(build, folders) {
   item.addEventListener('click', e => {
     if (e.target.closest('.av-build-item-actions')) return;
     if (e.target.closest('.av-build-rename-input')) return;
-    window.open(build.url, '_blank', 'noopener');
+    if (isSafeHttpsUrl(build.url, MOBALYTICS_HOST_RE)) window.open(build.url, '_blank', 'noopener');
   });
 
   return item;
@@ -1406,7 +1452,6 @@ function openMoveModal(buildId, currentFolderId, folders) {
       </div>
       <select id="av-move-sel" style="width:100%;padding:7px 8px;background:#0d0d1e;border:1px solid #2a2a52;border-radius:6px;color:#c0c0e0;font-size:12px;margin-bottom:14px;">
         <option value="">— No folder —</option>
-        ${(folders || []).map(f => `<option value="${escHtml(f.id)}" ${f.id === currentFolderId ? 'selected' : ''}>${escHtml(f.name)}</option>`).join('')}
       </select>
       <div class="av-modal-actions">
         <button id="av-move-cancel" class="av-btn-secondary">Cancel</button>
@@ -1414,6 +1459,9 @@ function openMoveModal(buildId, currentFolderId, folders) {
       </div>
     </div>
   `;
+  const moveSel = modal.querySelector('#av-move-sel');
+  (folders || []).forEach(f => moveSel.appendChild(new Option(f.name, f.id)));
+  moveSel.value = currentFolderId || '';
   document.body.appendChild(modal);
   const close = () => modal.remove();
   modal.querySelector('.av-modal-close').addEventListener('click', close);
