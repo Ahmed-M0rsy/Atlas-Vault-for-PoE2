@@ -18,9 +18,7 @@
     }
   },
   "permissions": [
-    "storage",
-    "tabs",
-    "scripting"
+    "storage"
   ],
   "host_permissions": [
     "https://mobalytics.gg/*"

@@ -266,6 +266,11 @@ function extractBuildMeta() {
   };
 }
 
+// Popup asks the page for the current build's metadata
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === 'GET_BUILD_META') sendResponse(extractBuildMeta());
+});
+
 // ── Export / Import helpers ──────────────────────────────────────────────────
 async function exportData() {
   const { folders = [], builds = [], settings = {} } = await chrome.storage.local.get(['folders', 'builds', 'settings']);
@@ -1036,8 +1041,30 @@ async function populateFolderSelect(folders) {
 }
 
 // ── Load + render ─────────────────────────────────────────────────────────────
-async function loadAndRender() {
+let cachedData = null;       // last { folders, builds } rendered; lets search/sort skip storage reads
+let renderInFlight = null;
+let renderQueued = false;
+
+// Coalesces overlapping calls (an action's own refresh + the storage-change refresh)
+// so at most one extra pass runs after the current one.
+function loadAndRender() {
+  if (renderInFlight) { renderQueued = true; return renderInFlight; }
+  renderInFlight = (async () => {
+    try {
+      do {
+        renderQueued = false;
+        await loadAndRenderOnce();
+      } while (renderQueued);
+    } finally {
+      renderInFlight = null;
+    }
+  })();
+  return renderInFlight;
+}
+
+async function loadAndRenderOnce() {
   const { folders, builds } = await loadData();
+  cachedData = { folders, builds };
   await populateFolderSelect(folders);
   renderTree(folders, builds);
   // Also update ToC + Variants if on a build page
@@ -1054,8 +1081,11 @@ function renderTree(folders, builds) {
   const tree = document.getElementById('av-sb-tree');
   if (!tree) return;
 
-  // If no args, load async
-  if (!folders) { loadAndRender(); return; }
+  // No args: reuse the last loaded data (search/sort), or load if nothing cached yet
+  if (!folders) {
+    if (!cachedData) { loadAndRender(); return; }
+    ({ folders, builds } = cachedData);
+  }
 
   tree.innerHTML = '';
 
@@ -1516,21 +1546,22 @@ function findToCSection() {
 }
 
 function tryInjectToC() {
-  if (!IS_BUILD_PAGE()) return;
+  // Returns true once the ToC is present in the sidebar (so retry observers can stop).
+  if (!IS_BUILD_PAGE()) return false;
   const tocEl = document.getElementById('av-toc-section');
-  if (!tocEl) return;
+  if (!tocEl) return false;
 
   const section = findToCSection();
-  if (!section) return;
+  if (!section) return false;
 
   const links = Array.from(section.querySelectorAll('a[href*="#"]'));
-  if (!links.length) return;
+  if (!links.length) return false;
 
   const linksContainer = document.getElementById('av-toc-links-sb');
-  if (!linksContainer) return;
+  if (!linksContainer) return false;
 
   // Don't re-inject if links already populated
-  if (linksContainer.children.length === links.length) return;
+  if (linksContainer.children.length === links.length) return true;
 
   linksContainer.innerHTML = '';
   links.forEach(orig => {
@@ -1564,6 +1595,7 @@ function tryInjectToC() {
   }
   tocInjected = true;
   setupScrollSpy(links, linksContainer);
+  return true;
 }
 
 function setupScrollSpy(originalLinks, container) {
@@ -1751,9 +1783,13 @@ const navObserver = new MutationObserver(() => {
 
 // ── Storage change listener ───────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes.folders || changes.builds || changes.settings)) {
-    loadAndRender();
+  if (area !== 'local' || !(changes.folders || changes.builds || changes.settings)) return;
+  // Layout-only settings changes (zoom, resize, collapse) don't need a tree rebuild.
+  if (!changes.folders && !changes.builds) {
+    const o = changes.settings.oldValue || {}, n = changes.settings.newValue || {};
+    if (o.buildSort === n.buildSort) { loadData(); return; }
   }
+  loadAndRender();
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1768,19 +1804,20 @@ window.addEventListener('resize', () => {
 });
 
 // Try ToC + Variants on build pages (with retry for React rendering)
+// Uses the module-level tocRetry / vRetry so SPA navigation can cancel them.
 if (IS_BUILD_PAGE()) {
   if (!tryInjectToC()) {
-    const tocRetry = new MutationObserver(() => {
-      if (tryInjectToC()) tocRetry.disconnect();
+    tocRetry = new MutationObserver(() => {
+      if (tryInjectToC() && tocRetry) { tocRetry.disconnect(); tocRetry = null; }
     });
     tocRetry.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => tocRetry.disconnect(), 15000);
+    setTimeout(() => { if (tocRetry) { tocRetry.disconnect(); tocRetry = null; } }, 15000);
   }
   if (!tryInjectVariants()) {
-    const vRetry = new MutationObserver(() => {
-      if (tryInjectVariants()) vRetry.disconnect();
+    vRetry = new MutationObserver(() => {
+      if (tryInjectVariants() && vRetry) { vRetry.disconnect(); vRetry = null; }
     });
     vRetry.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => vRetry.disconnect(), 15000);
+    setTimeout(() => { if (vRetry) { vRetry.disconnect(); vRetry = null; } }, 15000);
   }
 }

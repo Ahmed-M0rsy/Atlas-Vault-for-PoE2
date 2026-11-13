@@ -179,20 +179,15 @@ async function handleSave() {
     return;
   }
   const folderId = document.getElementById('av-save-folder').value || null;
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => ({
-      title: document.querySelector('meta[property="og:title"]')?.content
-             || document.querySelector('h1')?.textContent?.trim()
-             || document.title,
-      author: document.querySelector('[class*="author"],[class*="creator"]')
-                ?.textContent?.trim().replace(/^by\s*/i, '') || '',
-      buildClass: '',
-      url: location.href,
-      thumbnail: document.querySelector('meta[property="og:image"]')?.content || ''
-    })
-  });
-  const meta = result.result;
+  // Ask the page's content script for the metadata (no "scripting" permission needed).
+  let meta;
+  try {
+    meta = await chrome.tabs.sendMessage(tab.id, { type: 'GET_BUILD_META' });
+  } catch (e) { meta = null; }
+  if (!meta) {
+    alert('Could not read this page. Reload the Mobalytics tab and try again.');
+    return;
+  }
   if (folderId) meta.folderId = folderId;
   await chrome.runtime.sendMessage({ type: 'SAVE_BUILD', build: meta });
   await loadData();
